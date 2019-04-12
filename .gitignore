@@ -1,0 +1,10 @@
+models/
+models_gpu/
+old/
+__pycache__/
+venv/
+whatever/
+.idea/
+
+*.pyc
+

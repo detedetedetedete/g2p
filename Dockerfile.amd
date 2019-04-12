@@ -1,0 +1,7 @@
+FROM rocm/tensorflow:rocm2.2-tf1.13-python3
+
+COPY *.py *.dict *.json /app/
+RUN pip3 install --upgrade pip
+RUN pip3 install --no-cache-dir h5py keras matplotlib numpy scipy
+
+
