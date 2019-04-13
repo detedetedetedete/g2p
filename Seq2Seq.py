@@ -18,18 +18,42 @@ import tensorflow as tf
 from IOMap import IOMap
 from LayerProvider import LayerProvider
 from OptimizerResolver import OptimizerResolver
+from ActivationResolver import ActivationResolver
 from Tee import Tee
+from copy import deepcopy;
 
 
 class Seq2Seq(object):
   def __init__(self, model_def=None, load=False, layer_provider=LayerProvider(),
-               optimizer_resolver=OptimizerResolver(), working_dir="./"):
+               optimizer_resolver=OptimizerResolver(), working_dir="./", activation_resolver=ActivationResolver()):
     self.layer_provider = layer_provider
     self.optimizer_resolver = optimizer_resolver
+    self.activation_resolver = activation_resolver
     self.working_dir = working_dir
     self.training_result = None
+    self.custom_objs = {}
     self.history = {"loss": [], "val_loss": []}
     self.last_train_data = {"train": {"in": [], "out": []}, "validate": {"in": [], "out": []}}
+    self.rnn_layers = {
+      "LSTM": {
+        "type": "LSTM",
+        "states": [
+          "state_h",
+          "state_c"
+        ],
+        "state_count": 0
+      },
+      "GRU": {
+        "type": "GRU",
+        "states": [
+          "state"
+        ],
+        "state_count": 0
+      }
+    }
+
+    for name, layer in self.rnn_layers.items():
+      layer["state_count"] = len(layer["states"])
 
     if load:
       model_def = self._load_model_def()
@@ -39,7 +63,9 @@ class Seq2Seq(object):
     self.start_token = "[S]"
     self.end_token = "[E]"
 
-    self.model_def = model_def
+    self.model_def_original = model_def
+    self.model_def = deepcopy(model_def)
+    self.preprocess_model_def()
 
     if self.start_token not in self.model_def["out_tokens"]:
       self.model_def["out_tokens"].append(self.start_token)
@@ -50,18 +76,18 @@ class Seq2Seq(object):
     self.in_map = IOMap(self.model_def["in_tokens"])
     self.out_map = IOMap(self.model_def["out_tokens"])
 
-    if model_def["layers"][0]["type"] == "Input":
-      model_def["layers"].pop(0)
+    if self.model_def["layers"][0]["type"] == "Input":
+      self.model_def["layers"].pop(0)
 
-    last_lstm = None
-    for i, layer in enumerate(model_def["layers"]):
+    last_rnn = None
+    for i, layer in enumerate(self.model_def["layers"]):
       if "name" not in layer:
         layer["name"] = layer["type"]
-      if layer["type"] == "LSTM":
-        if last_lstm is not None:
-          last_lstm["last_lstm"] = False
-        layer["last_lstm"] = True
-        last_lstm = layer
+      if layer["type"] in self.rnn_layers:
+        if last_rnn is not None:
+          last_rnn["last_rnn"] = False
+        layer["last_rnn"] = True
+        last_rnn = layer
 
     if load:
       self._rebuild()
@@ -72,6 +98,13 @@ class Seq2Seq(object):
     with open(f"{self.working_dir}/model.json", "r") as file:
       return json.load(file)
 
+  def preprocess_model_def(self):
+    self.model_def["compile"]["optimizer"] = self.optimizer_resolver(self.model_def["compile"]["optimizer"], self)
+    for layer in self.model_def["layers"]:
+      if "activation" in layer["params"]:
+        layer["params"]["activation"] = self.activation_resolver(layer["params"]["activation"], self)
+        self.custom_objs[layer["params"]["activation"].__name__] = layer["params"]["activation"]
+
   @staticmethod
   def _find_layer_by_name(model, name):
     for layer in model.layers:
@@ -81,7 +114,7 @@ class Seq2Seq(object):
 
   def _rebuild(self):
     print("Loading model...")
-    self.training_model = load_model(f"{self.working_dir}/model.h5")
+    self.training_model = load_model(f"{self.working_dir}/model.h5", self.custom_objs)
 
     encoder_in = self._find_layer_by_name(self.training_model, "encoder_input").output
     encoder_out = []
@@ -93,21 +126,21 @@ class Seq2Seq(object):
     encoder_finished = False
     for i, layer_def in enumerate(self.model_def["layers"]):
       print(f"Rebuilding {layer_def['name']}-{i}...")
-      if layer_def["type"] == "LSTM":
-        decoder_in += [
-          Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_state_h_input"),
-          Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_state_c_input")
-        ]
+      if layer_def["type"] in self.rnn_layers:
+        for state in self.rnn_layers[layer_def["type"]]["states"]:
+          decoder_in.append(
+            Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_{state}_input")
+          )
 
-      if not encoder_finished and layer_def["type"] == "LSTM":
-        if layer_def["last_lstm"]:
+      if not encoder_finished and layer_def["type"] in self.rnn_layers:
+        if layer_def["last_rnn"]:
           encoder_finished = True
         elayer = self._find_layer_by_name(self.training_model, f"encoder_{layer_def['name']}-{i}")
         encoder_out += elayer.output[1:]
 
       dlayer = self._find_layer_by_name(self.training_model, f"decoder_{layer_def['name']}-{i}")
-      if layer_def["type"] == "LSTM":
-        dout = dlayer(last_decoder_out, initial_state=decoder_in[-2:])
+      if layer_def["type"] in self.rnn_layers:
+        dout = dlayer(last_decoder_out, initial_state=decoder_in[-self.rnn_layers[layer_def["type"]]["state_count"]:])
         last_decoder_out = dout[0]
         decoder_out += dout[1:]
       else:
@@ -134,38 +167,37 @@ class Seq2Seq(object):
     for i, layer_def in enumerate(self.model_def["layers"]):
       print(f"Adding {layer_def['name']}-{i}...")
       layer_ctor = self.layer_provider[layer_def["type"]](layer_def, i, self)
-      if layer_def["type"] == "LSTM":
+      if layer_def["type"] in self.rnn_layers:
         layer_def["params"]["return_state"] = True
         layer_def["params"]["return_sequences"] = True
-
-        decoder_in += [
-          Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_state_h_input"),
-          Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_state_c_input")
-        ]
+        for state in self.rnn_layers[layer_def["type"]]["states"]:
+          decoder_in.append(
+            Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_{state}_input")
+          )
 
       if not encoder_finished:
-        eparam = layer_def["params"].copy()
+        eparam = deepcopy(layer_def["params"])
         if i == len(self.model_def["layers"]) - 1:
           eparam["units"] = self.in_map.length()
-        if layer_def["last_lstm"]:
+        if layer_def["type"] in self.rnn_layers and layer_def["last_rnn"]:
           eparam["return_sequences"] = False
           encoder_finished = True
         elayer = layer_ctor(name=f"encoder_{layer_def['name']}-{i}", **eparam)
         eout = elayer(last_encoder_out)
-        if layer_def["type"] == "LSTM":
+        if layer_def["type"] in self.rnn_layers:
           last_encoder_out = eout[0]
           encoder_out += eout[1:]
         else:
           last_encoder_out = eout
 
-      dparam = layer_def["params"].copy()
+      dparam = deepcopy(layer_def["params"])
       if i == len(self.model_def["layers"]) - 1:
         dparam["units"] = self.out_map.length()
       dlayer = layer_ctor(name=f"decoder_{layer_def['name']}-{i}", **dparam)
-      if layer_def["type"] == "LSTM":
-        tdout = dlayer(last_tdecoder_out, initial_state=encoder_out[-2:])
+      if layer_def["type"] in self.rnn_layers:
+        tdout = dlayer(last_tdecoder_out, initial_state=encoder_out[-self.rnn_layers[layer_def["type"]]["state_count"]:])
         last_tdecoder_out = tdout[0]
-        dout = dlayer(last_decoder_out, initial_state=decoder_in[-2:])
+        dout = dlayer(last_decoder_out, initial_state=decoder_in[-self.rnn_layers[layer_def["type"]]["state_count"]:])
         last_decoder_out = dout[0]
         decoder_out += dout[1:]
       else:
@@ -177,9 +209,7 @@ class Seq2Seq(object):
     self.decoder_model = Model(inputs=decoder_in, outputs=[last_decoder_out] + decoder_out)
 
     print("Compiling the training model...")
-    compile_params = self.model_def["compile"].copy()
-    compile_params["optimizer"] = self.optimizer_resolver(compile_params["optimizer"], self)
-    self.training_model.compile(**compile_params)
+    self.training_model.compile(**self.model_def["compile"])
     print("Done.")
 
   def train(self, data=None, training_data=None, validation_data=None, validation_split=0.3, **kwargs):
@@ -239,6 +269,8 @@ class Seq2Seq(object):
 
   def __infer(self, input, max_length=255):
     states = self.encoder_model.predict(input)
+    if len(self.encoder_model.outputs) == 1:
+      states = [states]
     result = self.out_map.encode([self.start_token])
 
     end_frame = self.out_map.encode([self.end_token])[0]
@@ -359,12 +391,25 @@ class Seq2Seq(object):
 
   def save_for_inference_tf(self):
     print('Saving tf models for inference...\n\tIdentifying encoder output names...')
+    rnn_layers = list(
+      map(
+        lambda x: self.rnn_layers[x['type']],
+        filter(
+          lambda x: x['type'] in self.rnn_layers,
+          self.model_def['layers']
+        )
+      )
+    )
+
     tf.identity(self.encoder_model.inputs[0], 'encoder_input')
     encoder_output_names = []
-    for idx in range(0, int(len(self.encoder_model.outputs) / 2)):
-      encoder_output_names += [f'encoder_LSTM{idx}_state_h_output', f'encoder_LSTM{idx}_state_c_output']
-      tf.identity(self.encoder_model.outputs[idx*2+0], encoder_output_names[-2])
-      tf.identity(self.encoder_model.outputs[idx*2+1], encoder_output_names[-1])
+
+    enc_idx = 0
+    for layer_idx, layer in enumerate(rnn_layers):
+      for state in layer['states']:
+        encoder_output_names.append(f'encoder_{layer["type"]}-{layer_idx}_{state}_output')
+        tf.identity(self.encoder_model.outputs[enc_idx], encoder_output_names[-1])
+        enc_idx += 1
     print(f"\t{encoder_output_names}")
 
     print("\tConverting encoder variables to constants...")
@@ -382,12 +427,15 @@ class Seq2Seq(object):
     tf.identity(self.decoder_model.inputs[0], 'decoder_input')
     decoder_output_names = ['decoder_output']
     tf.identity(self.decoder_model.outputs[0], decoder_output_names[0])
-    for idx in range(0, int(len(self.decoder_model.outputs) / 2)):
-      decoder_output_names += [f'decoder_LSTM{idx}_state_h_output', f'decoder_LSTM{idx}_state_c_output']
-      tf.identity(self.decoder_model.outputs[idx*2+1], decoder_output_names[-2])
-      tf.identity(self.decoder_model.outputs[idx*2+2], decoder_output_names[-1])
-      tf.identity(self.decoder_model.inputs[idx*2+1], f'decoder_LSTM{idx}_state_h_input')
-      tf.identity(self.decoder_model.inputs[idx*2+2], f'decoder_LSTM{idx}_state_c_input')
+
+    dec_idx = 1
+    for layer_idx, layer in enumerate(rnn_layers):
+      for state in layer['states']:
+        decoder_output_names.append(f'decoder_{layer["type"]}-{layer_idx}_{state}_output')
+        tf.identity(self.decoder_model.outputs[dec_idx], decoder_output_names[-1])
+        tf.identity(self.decoder_model.inputs[dec_idx], f'decoder_{layer["type"]}-{layer_idx}_{state}_input')
+        dec_idx += 1
+
     print(f"\t{decoder_output_names}")
 
     print("\tConverting decoder variables to constants...")
@@ -416,7 +464,7 @@ class Seq2Seq(object):
       self.model_def["out_tokens"].remove(self.start_token)
       self.model_def["out_tokens"].remove(self.end_token)
 
-      json.dump(self.model_def, file, indent=2)
+      json.dump(self.model_def_original, file, indent=2)
 
       self.model_def["out_tokens"].append(self.start_token)
       self.model_def["out_tokens"].append(self.end_token)
@@ -428,6 +476,7 @@ class Seq2Seq(object):
     self.save_history()
     self.save_report()
     self.save_for_inference_tf()
+
 
 '''
   Add a class Seq2Seq model

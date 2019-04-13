@@ -1,5 +1,5 @@
 {
-  "name": "Grapheme-to-phoneme",
+  "name": "S2S-LSTM76-LSTM152-DenseSoftmax-Nadam",
   "in_tokens": [ "a", "ą", "b", "c", "č", "d", "e", "ę", "ė", "f", "g",
                     "h", "i", "į", "y", "j", "k", "l", "m", "n", "o", "p",
                     "r", "s", "š", "t", "u", "ų", "ū", "v", "z", "ž" ],
@@ -19,10 +19,8 @@
     }
   },
   "layers": [
-    { "type": "LSTM", "params": { "units": 152, "dropout": 0.2, "recurrent_dropout": 0.2 } },
-    { "type": "LSTM", "params": { "units": 76, "dropout": 0.2, "recurrent_dropout": 0.2 } },
-    { "type": "Dropout", "params":  { "rate": 0.3 } },
-    { "type": "Dense", "params": { "units":  76, "activation": "relu" } },
+    { "type": "LSTM", "params": { "units":  76 } },
+    { "type": "LSTM", "params": { "units":  152 } },
     { "type": "Dense", "params": { "activation": "softmax" } }
   ]
 }
