@@ -1,0 +1,9 @@
+syntax = "proto2";
+
+package g2p;
+
+enum WorkerType {
+    CPU = 1;
+    GPU = 2;
+}
+

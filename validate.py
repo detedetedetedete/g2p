@@ -3,6 +3,7 @@ from Seq2Seq import Seq2Seq
 
 np.set_printoptions(linewidth=np.nan)
 
+
 def process_csv(csv):
   csv.pop(0)
   input = []
@@ -15,14 +16,15 @@ def process_csv(csv):
     output.append(parts[2].split(":"))
   return input, output
 
+
 def validate_model(path):
-  with open(f"{path}/result_train.csv", "r") as ftrain:
+  with open("{}/result_train.csv".format(path), "r") as ftrain:
     train = process_csv(ftrain.readlines())
-  with open(f"{path}/result_validate.csv", "r") as fvalidate:
+  with open("{}/result_validate.csv".format(path), "r") as fvalidate:
     validate = process_csv(fvalidate.readlines())
   full = [train[0]+validate[0], train[1]+validate[1]]
 
-  model = Seq2Seq(load=True, working_dir=f"{path}")
+  model = Seq2Seq(load=True, working_dir=path)
   # model.save_for_inference_tf()
 
   train_acc = model.validate(train[0], train[1])

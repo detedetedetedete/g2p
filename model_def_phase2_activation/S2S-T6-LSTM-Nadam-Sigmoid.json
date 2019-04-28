@@ -1,5 +1,5 @@
 {
-  "name": "S2S-GRU152-GRU76-Dense76Relu-DenseSoftmax-Nadam",
+  "name": "S2S-T6-LSTM-Nadam-Sigmoid",
   "in_tokens": [ "a", "ą", "b", "c", "č", "d", "e", "ę", "ė", "f", "g",
                     "h", "i", "į", "y", "j", "k", "l", "m", "n", "o", "p",
                     "r", "s", "š", "t", "u", "ų", "ū", "v", "z", "ž" ],
@@ -19,9 +19,9 @@
     }
   },
   "layers": [
-    { "type": "GRU", "params": { "units":  152 } },
-    { "type": "GRU", "params": { "units":  76 } },
-    { "type": "Dense", "params": { "units":  76, "activation": "relu" } },
+    { "type": "LSTM", "params": { "units":  152 } },
+    { "type": "LSTM", "params": { "units":  76 } },
+    { "type": "Dense", "params": { "units":  76, "activation": "sigmoid" } },
     { "type": "Dense", "params": { "activation": "softmax" } }
   ]
 }

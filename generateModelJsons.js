@@ -1,5 +1,5 @@
 
-let models = [
+let models_phase1_topology = [
   'LSTM - Nadam - rnn[256] -> Dense<softmax>',
   'LSTM - Nadam - rnn[114] -> rnn[38] -> Dense<softmax>',
   'LSTM - Nadam - rnn[114] -> Dense[38]<relu> -> rnn[38] -> Dense<softmax>',
@@ -13,6 +13,26 @@ let models = [
   'GRU - Nadam - rnn[76] -> rnn[152] -> Dense<softmax>',
   'GRU - Nadam - rnn[152] -> rnn[76] -> Dense[76]<relu> -> Dense<softmax>'
 ];
+
+let models_phase2_activation = [
+  'LSTM - Nadam - rnn[114] -> Dense[38]<lrelu> -> rnn[38] -> Dense<softmax>',
+  'LSTM - Nadam - rnn[152] -> rnn[76] -> Dense[76]<lrelu> -> Dense<softmax>',
+  'GRU - Nadam - rnn[114] -> Dense[38]<lrelu> -> rnn[38] -> Dense<softmax>',
+  'GRU - Nadam - rnn[152] -> rnn[76] -> Dense[76]<lrelu> -> Dense<softmax>',
+  'LSTM - Nadam - rnn[114] -> Dense[38]<sigmoid> -> rnn[38] -> Dense<softmax>',
+  'LSTM - Nadam - rnn[152] -> rnn[76] -> Dense[76]<sigmoid> -> Dense<softmax>',
+  'GRU - Nadam - rnn[114] -> Dense[38]<sigmoid> -> rnn[38] -> Dense<softmax>',
+  'GRU - Nadam - rnn[152] -> rnn[76] -> Dense[76]<sigmoid> -> Dense<softmax>',
+  'LSTM - Nadam - rnn[114] -> Dense[38]<tanh> -> rnn[38] -> Dense<softmax>',
+  'LSTM - Nadam - rnn[152] -> rnn[76] -> Dense[76]<tanh> -> Dense<softmax>',
+  'GRU - Nadam - rnn[114] -> Dense[38]<tanh> -> rnn[38] -> Dense<softmax>',
+  'GRU - Nadam - rnn[152] -> rnn[76] -> Dense[76]<tanh> -> Dense<softmax>'
+];
+
+function activationResolver(actv) {
+  if(!actv) return null;
+  return 'lrelu' === actv ? '{ "type": "relu", "params": { "alpha": 0.3 } }' : `"${actv}"`;
+}
 
 function firstUpper(str) {
   return str[0].toUpperCase() + str.substr(1);
@@ -38,13 +58,15 @@ function generateModel(str) {
     
     model_name += `-${name}${units ? units : ''}${activation ? firstUpper(activation) : ''}`;
     
+    activation = activationResolver(activation);
+    
     let params = '';
     if(units && activation) {
-      params = `"units":  ${units}, "activation": "${activation}"`;
+      params = `"units":  ${units}, "activation": ${activation}`;
     } else if(units) {
       params = `"units":  ${units}`;
     } else if(activation) {
-      params = `"activation": "${activation}"`;
+      params = `"activation": ${activation}`;
     }
     
     acc += `{ "type": "${name}", "params": { ${params} } }`;
@@ -82,7 +104,7 @@ function generateModel(str) {
 
 const fs = require('fs');
 
-for(let model of models) {
+for(let model of models_phase2_activation) {
   model = generateModel(model);
   fs.writeFileSync(`${model.name}.json`, model.content);
 }

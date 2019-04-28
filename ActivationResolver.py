@@ -17,7 +17,7 @@ class ActivationResolver(object):
 
   def add(self, name, provider):
     if name in self.providers:
-      print(f"Warning: Provider '{name}' was already defined, will redefine.")
+      print("Warning: Provider '{}' was already defined, will redefine.".format(name))
     self.providers[name] = provider
 
   def __call__(self, conf, model):

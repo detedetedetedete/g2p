@@ -1,5 +1,5 @@
 {
-  "name": "S2S-LSTM76-LSTM152-DenseSoftmax-Nadam",
+  "name": "S2S-T5-GRU-Nadam-Tanh",
   "in_tokens": [ "a", "ą", "b", "c", "č", "d", "e", "ę", "ė", "f", "g",
                     "h", "i", "į", "y", "j", "k", "l", "m", "n", "o", "p",
                     "r", "s", "š", "t", "u", "ų", "ū", "v", "z", "ž" ],
@@ -19,8 +19,9 @@
     }
   },
   "layers": [
-    { "type": "LSTM", "params": { "units":  76 } },
-    { "type": "LSTM", "params": { "units":  152 } },
+    { "type": "GRU", "params": { "units":  114 } },
+    { "type": "Dense", "params": { "units":  38, "activation": "tanh" } },
+    { "type": "GRU", "params": { "units":  38 } },
     { "type": "Dense", "params": { "activation": "softmax" } }
   ]
 }

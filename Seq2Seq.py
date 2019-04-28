@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from itertools import chain
 from functools import reduce
@@ -8,7 +9,7 @@ import numpy as np
 from matplotlib import pyplot
 import matplotlib
 
-from keras.callbacks import TensorBoard
+from keras.callbacks import TensorBoard, ModelCheckpoint
 from keras.utils import plot_model
 from keras.models import load_model
 from keras import Input, Model
@@ -58,7 +59,7 @@ class Seq2Seq(object):
     if load:
       model_def = self._load_model_def()
     else:
-      pathlib.Path(working_dir).mkdir(parents=True, exist_ok=True)
+      pathlib.Path("{}/checkpoints".format(working_dir)).mkdir(parents=True, exist_ok=True)
 
     self.start_token = "[S]"
     self.end_token = "[E]"
@@ -90,12 +91,13 @@ class Seq2Seq(object):
         last_rnn = layer
 
     if load:
+      self.load_last_data()
       self._rebuild()
     else:
       self._build()
 
   def _load_model_def(self):
-    with open(f"{self.working_dir}/model.json", "r") as file:
+    with open("{}/model.json".format(self.working_dir), "r") as file:
       return json.load(file)
 
   def preprocess_model_def(self):
@@ -114,7 +116,7 @@ class Seq2Seq(object):
 
   def _rebuild(self):
     print("Loading model...")
-    self.training_model = load_model(f"{self.working_dir}/model.h5", self.custom_objs)
+    self.training_model = load_model("{}/model.h5".format(self.working_dir), self.custom_objs)
 
     encoder_in = self._find_layer_by_name(self.training_model, "encoder_input").output
     encoder_out = []
@@ -125,20 +127,20 @@ class Seq2Seq(object):
     last_decoder_out = decoder_in[0]
     encoder_finished = False
     for i, layer_def in enumerate(self.model_def["layers"]):
-      print(f"Rebuilding {layer_def['name']}-{i}...")
+      print("Rebuilding {}-{}...".format(layer_def['name'], i))
       if layer_def["type"] in self.rnn_layers:
         for state in self.rnn_layers[layer_def["type"]]["states"]:
           decoder_in.append(
-            Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_{state}_input")
+            Input(shape=(layer_def['params']['units'],), name="decoder_{}-{}_{}_input".format(layer_def['name'], i, state))
           )
 
       if not encoder_finished and layer_def["type"] in self.rnn_layers:
         if layer_def["last_rnn"]:
           encoder_finished = True
-        elayer = self._find_layer_by_name(self.training_model, f"encoder_{layer_def['name']}-{i}")
+        elayer = self._find_layer_by_name(self.training_model, "encoder_{}-{}".format(layer_def['name'], i))
         encoder_out += elayer.output[1:]
 
-      dlayer = self._find_layer_by_name(self.training_model, f"decoder_{layer_def['name']}-{i}")
+      dlayer = self._find_layer_by_name(self.training_model, "decoder_{}-{}".format(layer_def['name'], i))
       if layer_def["type"] in self.rnn_layers:
         dout = dlayer(last_decoder_out, initial_state=decoder_in[-self.rnn_layers[layer_def["type"]]["state_count"]:])
         last_decoder_out = dout[0]
@@ -165,14 +167,14 @@ class Seq2Seq(object):
     last_decoder_out = decoder_in[0]
     encoder_finished = False
     for i, layer_def in enumerate(self.model_def["layers"]):
-      print(f"Adding {layer_def['name']}-{i}...")
+      print("Adding {}-{}...".format(layer_def['name'], i))
       layer_ctor = self.layer_provider[layer_def["type"]](layer_def, i, self)
       if layer_def["type"] in self.rnn_layers:
         layer_def["params"]["return_state"] = True
         layer_def["params"]["return_sequences"] = True
         for state in self.rnn_layers[layer_def["type"]]["states"]:
           decoder_in.append(
-            Input(shape=(layer_def['params']['units'],), name=f"decoder_{layer_def['name']}-{i}_{state}_input")
+            Input(shape=(layer_def['params']['units'],), name="decoder_{}-{}_{}_input".format(layer_def['name'], i, state))
           )
 
       if not encoder_finished:
@@ -182,7 +184,7 @@ class Seq2Seq(object):
         if layer_def["type"] in self.rnn_layers and layer_def["last_rnn"]:
           eparam["return_sequences"] = False
           encoder_finished = True
-        elayer = layer_ctor(name=f"encoder_{layer_def['name']}-{i}", **eparam)
+        elayer = layer_ctor(name="encoder_{}-{}".format(layer_def['name'], i), **eparam)
         eout = elayer(last_encoder_out)
         if layer_def["type"] in self.rnn_layers:
           last_encoder_out = eout[0]
@@ -193,7 +195,7 @@ class Seq2Seq(object):
       dparam = deepcopy(layer_def["params"])
       if i == len(self.model_def["layers"]) - 1:
         dparam["units"] = self.out_map.length()
-      dlayer = layer_ctor(name=f"decoder_{layer_def['name']}-{i}", **dparam)
+      dlayer = layer_ctor(name="decoder_{}-{}".format(layer_def['name'], i), **dparam)
       if layer_def["type"] in self.rnn_layers:
         tdout = dlayer(last_tdecoder_out, initial_state=encoder_out[-self.rnn_layers[layer_def["type"]]["state_count"]:])
         last_tdecoder_out = tdout[0]
@@ -212,19 +214,7 @@ class Seq2Seq(object):
     self.training_model.compile(**self.model_def["compile"])
     print("Done.")
 
-  def train(self, data=None, training_data=None, validation_data=None, validation_split=0.3, **kwargs):
-    if data is not None:
-      train_n = int(len(data) * (1. - validation_split))
-      training_words = np.random.choice(list(data.keys()), train_n, False)
-      training_data = {k: v for (k, v) in data.items() if k in training_words}
-      validation_data = {k: v for (k, v) in data.items() if k not in training_words}
-
-    train_date = time.strftime("%d_%m_%Y-%H%M%S")
-    with open(f"{self.working_dir}/training_data_{train_date}.json", "w") as file:
-      json.dump(training_data, file, indent=2)
-    with open(f"{self.working_dir}/validation_data_{train_date}.json", "w") as file:
-      json.dump(validation_data, file, indent=2)
-
+  def proccess_training_data(self, training_data, validation_data):
     for record in chain(training_data.items(), validation_data.items()):
       record[1].insert(0, self.start_token)
       record[1].append(self.end_token)
@@ -245,11 +235,55 @@ class Seq2Seq(object):
       }
     }
 
-    tensorboard_callback = TensorBoard(log_dir=f"{self.working_dir}/tensorboard", histogram_freq=10)
+    return train_encoder_input, train_decoder_input, train_decoder_output,\
+        validate_encoder_input, validate_decoder_input, validate_decoder_output
+
+  def load_last_data(self):
+    files = os.listdir(self.working_dir)
+    training_data = None
+    validation_data = None
+    for file in files:
+      if file.startswith("training_data_"):
+        with open("{}/{}".format(self.working_dir, file)) as t:
+          training_data = json.load(t)
+      elif file.startswith("validation_data_"):
+        with open("{}/{}".format(self.working_dir, file)) as v:
+          validation_data = json.load(v)
+      if training_data is not None and validation_data is not None:
+        break
+
+    self.proccess_training_data(training_data, validation_data)
+
+  def train(self, data=None, training_data=None, validation_data=None, validation_split=0.3, **kwargs):
+    if data is not None:
+      train_n = int(len(data) * (1. - validation_split))
+      training_words = np.random.choice(list(data.keys()), train_n, False)
+      training_data = {k: v for (k, v) in data.items() if k in training_words}
+      validation_data = {k: v for (k, v) in data.items() if k not in training_words}
+
+    train_date = time.strftime("%d_%m_%Y-%H%M%S")
+    with open("{}/training_data_{}.json".format(self.working_dir, train_date), "w") as file:
+      json.dump(training_data, file, indent=2)
+    with open("{}/validation_data_{}.json".format(self.working_dir, train_date), "w") as file:
+      json.dump(validation_data, file, indent=2)
+
+    train_encoder_input, train_decoder_input, train_decoder_output, \
+        validate_encoder_input, validate_decoder_input, validate_decoder_output = \
+            self.proccess_training_data(training_data, validation_data)
+
+    tensorboard_callback = TensorBoard(log_dir="{}/tensorboard".format(self.working_dir))
+    model_checkpoint = ModelCheckpoint(
+      filepath="{}/checkpoints/weights.{{epoch:03d}}-loss{{loss:.4f}}-val_loss{{val_loss:.4f}}.hdf5".format(self.working_dir),
+      monitor="val_loss",
+      verbose=1,
+      save_weights_only=True,
+      period=10
+    )
+    default_callbacks = [tensorboard_callback, model_checkpoint]
     if "callbacks" in kwargs:
-      kwargs["callbacks"].append(tensorboard_callback)
+      kwargs["callbacks"].extend(default_callbacks)
     else:
-      kwargs["callbacks"] = [tensorboard_callback]
+      kwargs["callbacks"] = default_callbacks
 
     kwargs["validation_data"] = ([validate_encoder_input, validate_decoder_input], validate_decoder_output)
     self.training_result = self.training_model.fit([train_encoder_input, train_decoder_input], train_decoder_output, **kwargs)
@@ -298,32 +332,33 @@ class Seq2Seq(object):
   def save_history(self):
     matplotlib.rcParams['figure.figsize'] = (18, 16)
     matplotlib.rcParams['figure.dpi'] = 180
+    pyplot.figure()
     pyplot.plot(self.history['loss'])
     pyplot.plot(self.history['val_loss'])
     pyplot.title('model train vs validation loss')
     pyplot.ylabel('loss')
     pyplot.xlabel('epoch')
     pyplot.legend(['train', 'validation'], loc='upper right')
-    pyplot.savefig(f"{self.working_dir}/history.pdf")
+    pyplot.savefig("{}/history.pdf".format(self.working_dir))
 
   def save_summary(self, width=256):
-    with Tee(f"{self.working_dir}/summary.log", 'w'):
+    with Tee("{}/summary.log".format(self.working_dir), 'w'):
       self.training_model.summary(width)
 
   @staticmethod
   def _acc_report(data, count):
-    print(f'Out of {count} test cases:')
+    print("Out of {} test cases:".format(count))
     for err_n, err_count in sorted(data.items()):
-      print(f'\tHad {err_n} mistakes: {err_count} ({"{0:.2f}".format(err_count / count * 100)}%)')
+      print("\tHad {} mistakes: {} ({:.2f}%)".format(err_n, err_count, err_count / count * 100))
 
   @staticmethod
   def _write_report_csv(records, file):
     file.write("input;output;expected;errors;\n")
     for rec in records:
-      file.write(f"{reduce(lambda a,b: f'{a}{b}', rec['input'])};"
-                 f"{reduce(lambda a,b: f'{a}:{b}', rec['output'])};"
-                 f"{reduce(lambda a,b: f'{a}:{b}', rec['expected_output'])};"
-                 f"{rec['errors']};\n")
+      file.write("{};".format(reduce(lambda a, b: "{}{}".format(a, b), rec['input'])) +
+                 "{};".format(reduce(lambda a, b: "{}:{}".format(a, b), rec['output'])) +
+                 "{};".format(reduce(lambda a, b: "{}:{}".format(a, b), rec['expected_output'])) +
+                 "{};\n".format(rec['errors']))
     file.write('\n')
 
   def validate(self, inputs, real_outputs):
@@ -369,10 +404,19 @@ class Seq2Seq(object):
 
     return accuracy, report
 
-  def save_report(self):
-    accuracy, report = self._generate_report()
-
-    with Tee(f"{self.working_dir}/summary.log", 'a'):
+  def save_accuracy(self, accuracy, report, name):
+    train = accuracy["train"][0] if 0 in accuracy["train"] else 0
+    val = accuracy["validate"][0] if 0 in accuracy["validate"] else 0
+    full = accuracy["full"][0] if 0 in accuracy["full"] else 0
+    with Tee("{}/{}-{:.2f}-{:.2f}-{:.2f}.log".format(
+              self.working_dir,
+              name,
+              train / len(report["train"]) * 100,
+              val / len(report["validate"]) * 100,
+              full / len(report["full"]) * 100
+          ),
+          'a'
+      ):
       print('------------------Accuracy----------------------')
       print('-----------------Train set----------------------')
       self._acc_report(accuracy["train"], len(report["train"]))
@@ -382,12 +426,37 @@ class Seq2Seq(object):
       self._acc_report(accuracy["full"], len(report["full"]))
       print('------------------------------------------------')
 
+  def save_report(self, report, name):
     for rep in report:
-      with open(f"{self.working_dir}/result_{rep}.csv", "w") as file:
+      with open("{}/{}_{}.csv".format(self.working_dir, name, rep), "w") as file:
         self._write_report_csv(report[rep], file)
 
+  def save_full_report(self, accuracy_name='accuracy', report_name='result'):
+    accuracy, report = self._generate_report()
+    self.save_accuracy(accuracy, report, accuracy_name)
+    self.save_report(report, report_name)
+
+  def load_weights(self, path):
+    self.training_model.load_weights(path)
+
+  def evaluate_checkpoints(self):
+    if not os.path.isdir("{}/checkpoints".format(self.working_dir)):
+      print("No checkpoint folder!")
+      return
+    checkpoints = [file for file in os.listdir("{}/checkpoints".format(self.working_dir))
+                   if file.startswith('weights.') and file.endswith('.hdf5')]
+    for checkpoint in sorted(checkpoints):
+      path = "{}/checkpoints/{}".format(self.working_dir, checkpoint)
+      print("Evaluating {}...".format(path))
+      self.load_weights(path)
+      relative_path = "checkpoints/{}".format(checkpoint)
+      accuracy, report = self._generate_report()
+      self.save_accuracy(accuracy, report, relative_path)
+    self.load_weights("{}/model-weights.h5".format(self.working_dir))
+
   def save_model(self):
-    self.training_model.save(f"{self.working_dir}/model.h5")
+    self.training_model.save("{}/model.h5".format(self.working_dir))
+    self.training_model.save_weights("{}/model-weights.h5".format(self.working_dir))
 
   def save_for_inference_tf(self):
     print('Saving tf models for inference...\n\tIdentifying encoder output names...')
@@ -407,10 +476,10 @@ class Seq2Seq(object):
     enc_idx = 0
     for layer_idx, layer in enumerate(rnn_layers):
       for state in layer['states']:
-        encoder_output_names.append(f'encoder_{layer["type"]}-{layer_idx}_{state}_output')
+        encoder_output_names.append("encoder_{}-{}_{}_output".format(layer["type"], layer_idx, state))
         tf.identity(self.encoder_model.outputs[enc_idx], encoder_output_names[-1])
         enc_idx += 1
-    print(f"\t{encoder_output_names}")
+    print("\t{}".format(encoder_output_names))
 
     print("\tConverting encoder variables to constants...")
     session = K.get_session()
@@ -431,12 +500,12 @@ class Seq2Seq(object):
     dec_idx = 1
     for layer_idx, layer in enumerate(rnn_layers):
       for state in layer['states']:
-        decoder_output_names.append(f'decoder_{layer["type"]}-{layer_idx}_{state}_output')
+        decoder_output_names.append("decoder_{}-{}_{}_output".format(layer["type"], layer_idx, state))
         tf.identity(self.decoder_model.outputs[dec_idx], decoder_output_names[-1])
-        tf.identity(self.decoder_model.inputs[dec_idx], f'decoder_{layer["type"]}-{layer_idx}_{state}_input')
+        tf.identity(self.decoder_model.inputs[dec_idx], "decoder_{}-{}_{}_input".format(layer["type"], layer_idx, state))
         dec_idx += 1
 
-    print(f"\t{decoder_output_names}")
+    print("\t{}".format(decoder_output_names))
 
     print("\tConverting decoder variables to constants...")
     decoder_model_const = tf.graph_util.convert_variables_to_constants(
@@ -451,16 +520,16 @@ class Seq2Seq(object):
     print("Saving tf models for inference - Done")
 
   def save_model_plots(self):
-    plot_model(self.training_model, to_file=f"{self.working_dir}/model.png", show_layer_names=True, show_shapes=True)
-    plot_model(self.encoder_model, to_file=f"{self.working_dir}/encoder_model.png", show_layer_names=True, show_shapes=True)
-    plot_model(self.decoder_model, to_file=f"{self.working_dir}/decoder_model.png", show_layer_names=True, show_shapes=True)
+    plot_model(self.training_model, to_file="{}/model.png".format(self.working_dir), show_layer_names=True, show_shapes=True)
+    plot_model(self.encoder_model, to_file="{}/encoder_model.png".format(self.working_dir), show_layer_names=True, show_shapes=True)
+    plot_model(self.decoder_model, to_file="{}/decoder_model.png".format(self.working_dir), show_layer_names=True, show_shapes=True)
 
   def save_no_train(self, width=256):
-    self.save_model_plots()
+    #self.save_model_plots()
     self.save_summary(width=width)
 
   def save_model_def(self):
-    with open(f"{self.working_dir}/model.json", "w") as file:
+    with open("{}/model.json".format(self.working_dir), "w") as file:
       self.model_def["out_tokens"].remove(self.start_token)
       self.model_def["out_tokens"].remove(self.end_token)
 
@@ -474,8 +543,9 @@ class Seq2Seq(object):
     self.save_model_def()
     self.save_no_train(width)
     self.save_history()
-    self.save_report()
+    self.save_full_report()
     self.save_for_inference_tf()
+
 
 
 '''

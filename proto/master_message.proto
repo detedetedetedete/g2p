@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+package g2p;
+
+import "task_type.proto";
+
+message MasterMessage {
+    required TaskType task = 1;
+    optional string modelDefinition = 2;
+    optional bytes data = 3;
+    required string taskName = 4;
+}
+

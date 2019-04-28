@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package g2p;
+
+enum TaskStatus {
+    WAITING_TRAIN = 0;
+    TRAINING = 1;
+    WAITING_EVAL = 2;
+    EVALUATING = 3;
+    UNKNOWN_WAS_TRAINING = 4;
+    UNKNOWN_WAS_EVALUATING = 5;
+    FINISHED = 6;
+}
+

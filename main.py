@@ -1,31 +1,15 @@
 import numpy as np
-import re
 import time
-import json
 from Seq2Seq import Seq2Seq
 from keras import backend as K
 
-
-def split_record(rec):
-  parts = re.split(' {3,}', rec)
-  return parts[0], parts[1].split(' ')
-
-
-def load_model(path):
-  with open(path) as model_def_file:
-    return json.load(model_def_file)
-
-
-def load_records():
-  return dict(
-    [split_record(record) for record in filter(None, open('./g2p.dict', 'r', encoding='utf-8').read().split('\n'))]
-  )
+from utils import load_model, load_records
 
 
 def train(model_def_path, epochs=300, batch_size=64):
   model_def = load_model(model_def_path)
   records = load_records()
-  model = Seq2Seq(model_def, working_dir=time.strftime(f"./models/{model_def['name']}-%Y_%m_%d-%H%M%S"))
+  model = Seq2Seq(model_def, working_dir=time.strftime("./models/{}-%Y_%m_%d-%H%M%S".format(model_def['name'])))
   model.save_no_train()
   model.train(data=records, epochs=epochs, batch_size=batch_size)
   model.save()
@@ -50,22 +34,38 @@ np.set_printoptions(linewidth=np.nan)
 if __name__ == '__main__':
   #default()
   models = [
-    'nextModels/S2S-GRU256-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-LSTM256-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-GRU76-GRU152-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-LSTM76-LSTM152-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-GRU114-GRU38-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-LSTM114-LSTM38-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-GRU152-GRU76-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-LSTM152-LSTM76-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-GRU114-Dense38Relu-GRU38-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-LSTM114-Dense38Relu-LSTM38-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-GRU152-GRU76-Dense76Relu-DenseSoftmax-Nadam.json',
-    'nextModels/S2S-LSTM152-LSTM76-Dense76Relu-DenseSoftmax-Nadam.json'
+    './model_def_phase1_topology/S2S-T1-GRU-Nadam.json',
+    './model_def_phase1_topology/S2S-T1-LSTM-Nadam.json',
+    './model_def_phase1_topology/S2S-T2-GRU-Nadam.json',
+    './model_def_phase1_topology/S2S-T2-LSTM-Nadam.json',
+    './model_def_phase1_topology/S2S-T3-GRU-Nadam.json',
+    './model_def_phase1_topology/S2S-T3-LSTM-Nadam.json',
+    './model_def_phase1_topology/S2S-T4-GRU-Nadam.json',
+    './model_def_phase1_topology/S2S-T4-LSTM-Nadam.json',
+    './model_def_phase1_topology/S2S-T5-GRU-Nadam-ReLU.json',
+    './model_def_phase1_topology/S2S-T5-LSTM-Nadam-ReLU.json',
+    './model_def_phase1_topology/S2S-T6-GRU-Nadam-ReLU.json',
+    './model_def_phase1_topology/S2S-T6-LSTM-Nadam-ReLU.json',
+    './model_def_phase2_activation/S2S-T5-GRU-Nadam-LReLU.json',
+    './model_def_phase2_activation/S2S-T5-GRU-Nadam-Sigmoid.json',
+    './model_def_phase2_activation/S2S-T5-GRU-Nadam-Tanh.json',
+    './model_def_phase2_activation/S2S-T5-GRU-Nadam-Elu.json',
+    './model_def_phase2_activation/S2S-T5-LSTM-Nadam-LReLU.json',
+    './model_def_phase2_activation/S2S-T5-LSTM-Nadam-Sigmoid.json',
+    './model_def_phase2_activation/S2S-T5-LSTM-Nadam-Tanh.json',
+    './model_def_phase2_activation/S2S-T5-LSTM-Nadam-Elu.json',
+    './model_def_phase2_activation/S2S-T6-GRU-Nadam-LReLU.json',
+    './model_def_phase2_activation/S2S-T6-GRU-Nadam-Sigmoid.json',
+    './model_def_phase2_activation/S2S-T6-GRU-Nadam-Tanh.json',
+    './model_def_phase2_activation/S2S-T6-GRU-Nadam-Elu.json',
+    './model_def_phase2_activation/S2S-T6-LSTM-Nadam-LReLU.json',
+    './model_def_phase2_activation/S2S-T6-LSTM-Nadam-Sigmoid.json',
+    './model_def_phase2_activation/S2S-T6-LSTM-Nadam-Tanh.json',
+    './model_def_phase2_activation/S2S-T6-LSTM-Nadam-Elu.json'
   ]
 
   for model in models:
-    for i in range(0, 1):
+    for i in range(0, 2):
       mdl = train(model, 300, 64)
       K.clear_session()
       Seq2Seq(load=True, working_dir=mdl.working_dir)

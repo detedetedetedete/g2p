@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+package g2p;
+
+enum WorkerStatus {
+    IDLE = 0;
+    WORKING = 1;
+    ERROR = 2;
+    DONE = 3;
+    PENDING = 4;
+    DISCONNECTED = 5;
+}
+

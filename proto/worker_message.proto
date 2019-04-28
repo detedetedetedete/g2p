@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package g2p;
+
+import "worker_status.proto";
+import "worker_type.proto";
+import "task_type.proto";
+
+message WorkerMessage {
+    required WorkerStatus status = 1;
+    required TaskType task = 2;
+    optional bytes data = 3;
+    required WorkerType type = 4;
+}

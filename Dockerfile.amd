@@ -1,7 +1,14 @@
 FROM rocm/tensorflow:rocm2.2-tf1.13-python3
 
 COPY *.py *.dict *.json /app/
+COPY model_def_phase1_topology /app/model_def_phase1_topology/
+COPY model_def_phase2_activation /app/model_def_phase2_activation/
+COPY proto /app/proto/
+RUN apt-get update && apt-get install -y locales graphviz && apt-get clean && locale-gen en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
 RUN pip3 install --upgrade pip
-RUN pip3 install --no-cache-dir h5py keras matplotlib numpy scipy
+RUN pip3 install --no-cache-dir h5py keras matplotlib numpy scipy pydot websocket websocket-client protobuf
 
 

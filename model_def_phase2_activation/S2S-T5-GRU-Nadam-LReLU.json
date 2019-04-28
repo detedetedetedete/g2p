@@ -1,5 +1,5 @@
 {
-  "name": "S2S-GRU114-GRU38-DenseSoftmax-Nadam",
+  "name": "S2S-T5-GRU-Nadam-LReLU",
   "in_tokens": [ "a", "ą", "b", "c", "č", "d", "e", "ę", "ė", "f", "g",
                     "h", "i", "į", "y", "j", "k", "l", "m", "n", "o", "p",
                     "r", "s", "š", "t", "u", "ų", "ū", "v", "z", "ž" ],
@@ -20,6 +20,7 @@
   },
   "layers": [
     { "type": "GRU", "params": { "units":  114 } },
+    { "type": "Dense", "params": { "units":  38, "activation": { "type": "relu", "params": { "alpha": 0.3 } } } },
     { "type": "GRU", "params": { "units":  38 } },
     { "type": "Dense", "params": { "activation": "softmax" } }
   ]
