@@ -8,6 +8,7 @@ from io import BytesIO
 from keras import backend as K
 
 import websocket
+from keras.callbacks import LambdaCallback
 from websocket import ABNF
 
 from Seq2Seq import Seq2Seq
@@ -33,6 +34,8 @@ else:
   device = WorkerType.CPU
 data = None
 work_dir = "g2p-worker-{}".format(int(round(time.time() * 1000)))
+progress = 0
+work = True
 
 parser = argparse.ArgumentParser()
 
@@ -59,15 +62,22 @@ def compress_and_set_result(model_path):
     pass
 
 
+def set_progress(value):
+  global progress
+  progress = value
+
+
 # noinspection PyBroadException
 def train(message):
   K.clear_session()
   global status
   global data
   global task
+  global progress
   data = None
   status = WorkerStatus.WORKING
   task = TaskType.TRAIN
+  progress = 0
   try:
     model_def = json.loads(message.modelDefinition)
     records = load_records()
@@ -77,7 +87,8 @@ def train(message):
     except FileNotFoundError:
       pass
     model = Seq2Seq(model_def, working_dir=model_path)
-    model.train(records, epochs=model_def["epochs"], batch_size=model_def["batch_size"])
+    model.train(records, epochs=model_def["epochs"], batch_size=model_def["batch_size"],
+                callbacks=[LambdaCallback(on_epoch_end=lambda epoch, logs: set_progress(epoch+1))])
     model.save_model()
     model.save_model_def()
     model.save_no_train()
@@ -88,6 +99,7 @@ def train(message):
   except Exception:
     status = WorkerStatus.ERROR
     task = TaskType.NONE
+    progress = 0
     traceback.print_exc()
 
 
@@ -97,9 +109,11 @@ def validate(message):
   global status
   global data
   global task
+  global progress
   data = None
   status = WorkerStatus.WORKING
   task = TaskType.EVALUATE
+  progress = 0
   try:
     model_path = "{}/{}".format(work_dir, message.taskName)
     try:
@@ -112,12 +126,14 @@ def validate(message):
       tar.extractall(work_dir)
     model = Seq2Seq(load=True, working_dir=model_path)
     model.save_full_report()
-    model.evaluate_checkpoints()
+    progress = 1
+    model.evaluate_checkpoints(progress=lambda p: set_progress(p+1))
 
     compress_and_set_result(model_path)
   except Exception:
     status = WorkerStatus.ERROR
     task = TaskType.NONE
+    progress = 0
     traceback.print_exc()
 
 
@@ -143,12 +159,14 @@ def on_message(ws, data):
 
 
 def on_error(ws, error):
+  global work
+  work = False
   print(error)
 
 
 def on_close(ws):
-  # master went away - do not shutdown if no shutdown message was received
-  # wait for some time and shutdown if master does not go online in N time (property?)
+  global work
+  work = False
   print("### closed ###")
 
 
@@ -171,7 +189,7 @@ ws.on_open = on_open
 
 def heartbeat(ws):
   sleep = 5
-  while True:
+  while work:
     time.sleep(sleep)
     if ws is not None:
       if sleep == 5:
@@ -180,6 +198,7 @@ def heartbeat(ws):
       message.status = status
       message.type = device
       message.task = task
+      message.progress = progress
       if status == WorkerStatus.DONE:
         message.data = data
       print("\n>>>Sending message to master:\n{}"
@@ -187,5 +206,7 @@ def heartbeat(ws):
       ws.send(message.SerializeToString(), ABNF.OPCODE_BINARY)
 
 
-threading.Thread(target=heartbeat, args=[ws]).start()
+thrd = threading.Thread(target=heartbeat, args=[ws])
+thrd.start()
 ws.run_forever()
+thrd.join()

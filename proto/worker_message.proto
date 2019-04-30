@@ -11,4 +11,5 @@ message WorkerMessage {
     required TaskType task = 2;
     optional bytes data = 3;
     required WorkerType type = 4;
+    optional int32 progress = 5;
 }

@@ -439,19 +439,20 @@ class Seq2Seq(object):
   def load_weights(self, path):
     self.training_model.load_weights(path)
 
-  def evaluate_checkpoints(self):
+  def evaluate_checkpoints(self, progress=lambda p: None):
     if not os.path.isdir("{}/checkpoints".format(self.working_dir)):
       print("No checkpoint folder!")
       return
     checkpoints = [file for file in os.listdir("{}/checkpoints".format(self.working_dir))
                    if file.startswith('weights.') and file.endswith('.hdf5')]
-    for checkpoint in sorted(checkpoints):
+    for idx, checkpoint in enumerate(sorted(checkpoints)):
       path = "{}/checkpoints/{}".format(self.working_dir, checkpoint)
       print("Evaluating {}...".format(path))
       self.load_weights(path)
       relative_path = "checkpoints/{}".format(checkpoint)
       accuracy, report = self._generate_report()
       self.save_accuracy(accuracy, report, relative_path)
+      progress(idx+1)
     self.load_weights("{}/model-weights.h5".format(self.working_dir))
 
   def save_model(self):

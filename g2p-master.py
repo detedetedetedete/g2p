@@ -1,15 +1,18 @@
 import argparse
 import copy
 import os
+import re
 import sys
-import threading
 import traceback
 from json import JSONEncoder
+
+import tornado
+from tornado.httpserver import HTTPServer
 
 from utils import formatter
 import pathlib
 
-from SimpleWebSocketServer import SimpleWebSocketServer, WebSocket
+from tornado import websocket, ioloop
 import proto.worker_status_pb2 as WorkerStatus
 from proto.worker_message_pb2 import WorkerMessage
 import proto.task_status_pb2 as TaskStatus
@@ -25,6 +28,18 @@ class Task(object):
     self.status = TaskStatus.WAITING_TRAIN
     self.name = ""
     self.model_def = {}
+    self.trained_by = None
+    self.evaluated_by = None
+
+
+# noinspection PyShadowingBuiltins
+class Client(object):
+  def __init__(self, client, status, task=None, type=None, progress=None):
+    self.client = client
+    self.status = status
+    self.task = task
+    self.type = type
+    self.progress = progress
 
 
 class SimpleEncoder(JSONEncoder):
@@ -34,6 +49,11 @@ class SimpleEncoder(JSONEncoder):
     elif o.__class__ == Task:
       result = copy.deepcopy(o.__dict__)
       result["status"] = TaskStatus.TaskStatus.Name(result["status"])
+      return result
+    elif o.__class__ == Client:
+      result = copy.deepcopy(o).__dict__
+      result["status"] = WorkerStatus.WorkerStatus.Name(result["status"])
+      result["type"] = None if result["type"] is None else WorkerType.WorkerType.Name(result["type"])
       return result
     else:
       return o.__dict__
@@ -51,11 +71,7 @@ class Master(object):
   def on_new_client(self, client):
     client.id = self.counter
     self.counter += 1
-    self.clients[client.id] = {
-      "client": client,
-      "status": WorkerStatus.PENDING,
-      "task": None
-    }
+    self.clients[client.id] = Client(client.id, WorkerStatus.PENDING)
     self.print("New client(id={}) connected.".format(client.id))
 
   def print(self, string):
@@ -63,8 +79,8 @@ class Master(object):
     msg = json.dumps({
       "message": string
     })
-    for gui in self.gui:
-      gui.sendMessage(msg)
+    for id, gui in self.gui.items():
+      gui.write_message(msg)
 
   def get_task(self, type):
     first_unknown_train = None
@@ -72,15 +88,15 @@ class Master(object):
     first_waiting_train = None
     first_waiting_eval = None
     for id, task in self.tasks.items():
-      if task.status == TaskStatus.UNKNOWN_WAS_TRAINING:
+      if task.status == TaskStatus.UNKNOWN_WAS_TRAINING and first_unknown_train is None:
         first_unknown_train = task
-      elif task.status == TaskStatus.UNKNOWN_WAS_EVALUATING:
+      elif task.status == TaskStatus.UNKNOWN_WAS_EVALUATING and first_unknown_eval is None:
         first_unknown_eval = task
-      elif task.status == TaskStatus.WAITING_TRAIN:
+      elif task.status == TaskStatus.WAITING_TRAIN and first_waiting_train is None:
         first_waiting_train = task
-      elif task.status == TaskStatus.WAITING_EVAL:
+      elif task.status == TaskStatus.WAITING_EVAL and first_waiting_eval is None:
         first_waiting_eval = task
-      if None not in [first_waiting_eval, first_waiting_train, first_unknown_eval, first_unknown_train]:
+      if None not in [first_waiting_train, first_waiting_eval, first_unknown_eval, first_unknown_train]:
         break
 
     if all(i is None for i in [first_waiting_eval, first_waiting_train, first_unknown_eval, first_unknown_train]):
@@ -105,17 +121,17 @@ class Master(object):
         "gui": self.gui
       }
 
-      gui.sendMessage(json.dumps(data, cls=SimpleEncoder))
+      gui.write_message(json.dumps(data, cls=SimpleEncoder))
 
   def send_message(self, client, response):
     self.print(">>>Sending message to client(id={}):\n{}"
                .format(client.id, text_format.MessageToString(response, message_formatter=formatter)))
-    client.sendMessage(response.SerializeToString())
+    client.write_message(response.SerializeToString(), binary=True)
 
   def handle_idle(self, client, message):
     response = MasterMessage()
 
-    task = self.clients[client.id]["task"]
+    task = self.clients[client.id].task
     if task is not None:
       self.print("Client(id={}) sent idle status, when it still had an assigned job!".format(client.id))
       if task.status == TaskStatus.TRAINING:
@@ -152,15 +168,17 @@ class Master(object):
     response.taskName = task.name
 
     self.send_message(client, response)
-    self.clients[client.id]["task"] = task
+    self.clients[client.id].task = task
 
   def handle_done(self, client, message):
-    task = self.clients[client.id]["task"]
+    task = self.clients[client.id].task
 
     if task.status == TaskStatus.TRAINING and message.task == TaskType.TRAIN:
       next_status = TaskStatus.WAITING_EVAL
+      task.trained_by = client.id
     elif task.status == TaskStatus.EVALUATING and message.task == TaskType.EVALUATE:
       next_status = TaskStatus.FINISHED
+      task.evaluated_by = client.id
     else:
       self.print("Invalid task {} status {} on client(id={}) with task {} when DONE"
                  .format(task.name, TaskStatus.TaskStatus.Name(task.status), client.id,
@@ -181,13 +199,13 @@ class Master(object):
       file.write(message.data)
 
     task.status = next_status
-    self.clients[client.id]["task"] = None
+    self.clients[client.id].task = None
     self.handle_idle(client, message)
 
   def handle_error(self, client, message):
     self.print("Client(id={}) raised an error!".format(client.id))
-    if self.clients[client.id]["task"] is not None:
-      task = self.clients[client.id]["task"]
+    if self.clients[client.id].task is not None:
+      task = self.clients[client.id].task
       if task.status == TaskStatus.TRAINING:
         task.status = TaskStatus.UNKNOWN_WAS_TRAINING
         self.print("Client(id={}) had TRAINING task {}, reverting to WAITING_TRAIN".format(client.id, task.name))
@@ -198,13 +216,15 @@ class Master(object):
         self.print("Task {} has invalid status {} on disconnect, reverting to WAITING_TRAIN"
                    .format(task.name, TaskStatus.TaskStatus.Name(task.status)))
         task.status = TaskStatus.UNKNOWN_WAS_TRAINING
-    self.clients[client.id]["task"] = None
+    self.clients[client.id].task = None
     self.handle_idle(client, message)
 
   def on_client_message(self, client, message):
     self.print("<<<Message from client(id={}):\n{}"
                .format(client.id, text_format.MessageToString(message, message_formatter=formatter)))
-    self.clients[client.id]["status"] = message.status
+    self.clients[client.id].status = message.status
+    self.clients[client.id].type = message.type
+    self.clients[client.id].progress = message.progress
     if message.status == WorkerStatus.IDLE:
       self.handle_idle(client, message)
     elif message.status == WorkerStatus.DONE:
@@ -221,9 +241,11 @@ class Master(object):
 
   def on_client_disconnect(self, client):
     self.print("Client(id={}) disconnected.".format(client.id))
-    self.clients[client.id]["status"] = WorkerStatus.DISCONNECTED
-    if self.clients[client.id]["task"] is not None:
-      task = self.clients[client.id]["task"]
+    self.clients[client.id].client = client.id
+    self.clients[client.id].status = WorkerStatus.DISCONNECTED
+    self.clients[client.id].progress = None
+    if self.clients[client.id].task is not None:
+      task = self.clients[client.id].task
       if task.status == TaskStatus.TRAINING:
         task.status = TaskStatus.UNKNOWN_WAS_TRAINING
         self.print("Client(id={}) had TRAINING task {}, reverting to WAITING_TRAIN".format(client.id, task.name))
@@ -237,7 +259,8 @@ class Master(object):
         )
     else:
       self.print("Client(id={}) had no task.".format(client.id))
-    self.clients[client.id]["task"] = None
+    self.clients[client.id].task = None
+    self.update_gui()
 
   def on_new_gui_client(self, gui):
     gui.id = self.counter
@@ -253,49 +276,56 @@ master_instance = Master()
 
 
 # noinspection PyBroadException,PyShadowingNames
-class WorkerClient(WebSocket):
-  def __init__(self, server, sock, address):
-    super().__init__(server, sock, address)
-    self.id = None
+class WorkerClient(websocket.WebSocketHandler):
+  def data_received(self, chunk):
+    pass
 
-  def handleMessage(self):
+  def on_message(self, msg):
     try:
       message = WorkerMessage()
-      message.ParseFromString(self.data)
+      message.ParseFromString(msg)
       master_instance.on_client_message(self, message)
     except Exception:
       traceback.print_exc()
 
-  def handleConnected(self):
+  def open(self):
     try:
       master_instance.on_new_client(self)
     except Exception:
       traceback.print_exc()
 
-  def handleClose(self):
+  def on_close(self):
     try:
       master_instance.on_client_disconnect(self)
     except Exception:
       traceback.print_exc()
 
+  def check_origin(self, origin):
+    return True
+
 
 # noinspection PyBroadException,PyShadowingNames
-class GuiClient(WebSocket):
-  def __init__(self, server, sock, address):
-    super().__init__(server, sock, address)
-    self.id = None
+class GuiClient(websocket.WebSocketHandler):
+  def data_received(self, chunk):
+    pass
 
-  def handleConnected(self):
+  def on_message(self, message):
+    pass
+
+  def open(self):
     try:
       master_instance.on_new_gui_client(self)
     except Exception:
       traceback.print_exc()
 
-  def handleClose(self):
+  def on_close(self):
     try:
       master_instance.on_gui_client_disconnect(self)
     except Exception:
       traceback.print_exc()
+
+  def check_origin(self, origin):
+    return True
 
 
 parser = argparse.ArgumentParser()
@@ -312,6 +342,20 @@ parser.add_argument("--batch_size", default=64, type=int)
 
 
 args = parser.parse_args()
+
+worked_models = os.listdir("./work") if os.path.isdir("./work") else []
+present_models = {}
+for idx, value in enumerate(worked_models):
+  match = re.match(r'(.*)-([0-9]*)-([A-Z_]*)\.tar\.gz', value)
+  if match is not None and TaskStatus.TaskStatus.Value(match.groups()[2]) is not None:
+    groups = match.groups()
+    name = groups[0]
+    repeat = groups[1]
+    status = groups[2]
+    if name not in present_models:
+      present_models[name] = {}
+    present_models[name][repeat] = TaskStatus.TaskStatus.Value(status)
+
 
 models = args.models
 for directory in args.model_dirs:
@@ -333,12 +377,19 @@ for model in models:
     task.model_def["epochs"] = args.epochs
     task.model_def["batch_size"] = args.batch_size
     task.name = "{}-{}".format(task.model_def["name"], i)
-    print("Added task {}".format(task.name))
+    if task.model_def["name"] in present_models and str(i) in present_models[task.model_def["name"]]:
+      task.status = present_models[task.model_def["name"]][str(i)]
+      print("Task {} already exists with status {}".format(task.name, TaskStatus.TaskStatus.Name(task.status)))
+    else:
+      print("Added task {}".format(task.name))
     master_instance.tasks[task.name] = task
 
-gui_server = SimpleWebSocketServer(args.gui_address, args.gui_port, GuiClient)
-threading.Thread(target=lambda: gui_server.serveforever(), args=[]).start()
+gui_app = tornado.web.Application([(r"/", GuiClient)], websocket_max_message_size=1024*1024*1024)
+worker_app = tornado.web.Application([(r"/", WorkerClient)], websocket_max_message_size=1024*1024*1024)
 
+worker_server = HTTPServer(worker_app, max_buffer_size=1024*1024*1024)
 
-server = SimpleWebSocketServer(args.worker_address, args.worker_port, WorkerClient)
-server.serveforever()
+gui_app.listen(args.gui_port, address=args.gui_address)
+worker_server.listen(args.worker_port, address=args.worker_address)
+
+tornado.ioloop.IOLoop.instance().start()

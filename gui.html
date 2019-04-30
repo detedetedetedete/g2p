@@ -1,0 +1,61 @@
+<html>
+  <head>
+    <script src="gui.js"></script>
+  </head>
+  <body>
+    <h1 id="socket-status">Socket status: connecting...</h4>
+    <span id="last-update">No updates yet...</span><br>
+    <span id="last-log-message">No log messages yet...</span>
+    <div>
+      <textarea id="log-textarea" style="width:900px; height:400px;"></textarea>
+    </div>
+    <div>
+      <h2>Clients</h2>
+      <table id="client-table" style="border: solid 1px #999;">
+        <thead>
+          <tr style="border: solid 1px #999;">
+            <th style="border: solid 1px #999;">Client</th>
+            <th style="border: solid 1px #999;">Status</th>
+            <th style="border: solid 1px #999;">Type</th>
+            <th style="border: solid 1px #999;">Trained</th>
+            <th style="border: solid 1px #999;">Evaluated</th>
+            <th style="border: solid 1px #999;">Task</th>
+            <th style="border: solid 1px #999;">Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="display: none; border: solid 1px #999;">
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>Tasks</h2>
+      <table id="task-table" style="border: solid 1px #999;">
+        <thead>
+          <tr style="border: solid 1px #999;">
+            <th style="border: solid 1px #999;">Name</th>
+            <th style="border: solid 1px #999;">Status</th>
+            <th style="border: solid 1px #999;">Trained by</th>
+            <th style="border: solid 1px #999;">Evaluated by</th>
+            <th style="border: solid 1px #999;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="display: none; border: solid 1px #999;">
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"><input type="button" value="Model def"/></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>
