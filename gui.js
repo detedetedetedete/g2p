@@ -60,7 +60,7 @@ window.onload = function() {
           cells[2].innerText = task.trained_by;
         }
         if(notNullOrUndefined(task.evaluated_by)) {
-          object.clients[task.evaluated_by].evaluted = (object.clients[task.evaluated_by].evaluted || 0) + 1;
+          object.clients[task.evaluated_by].evaluated = (object.clients[task.evaluated_by].evaluated || 0) + 1;
           cells[3].innerText = task.evaluated_by;
         }
       }
