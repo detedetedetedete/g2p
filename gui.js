@@ -80,7 +80,8 @@ window.onload = function() {
         cells[3].innerText = client.trained || 0;
         cells[4].innerText = client.evaluated || 0;
         cells[5].innerText = client.task ? client.task.name : '---';
-        cells[6].innerText = client.progress !== undefined ? client.progress : '---';
+        cells[6].innerText = client.task ? client.task.status : '---';
+        cells[7].innerText = client.progress !== undefined ? client.progress : '---';
         clientTableBodyEl.appendChild(row);
       }
     }
