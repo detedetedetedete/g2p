@@ -250,7 +250,7 @@ class Master(object):
         task.status = TaskStatus.UNKNOWN_WAS_TRAINING
         self.print("Client(id={}) had TRAINING task {}, reverting to WAITING_TRAIN".format(client.id, task.name))
       elif task.status == TaskStatus.EVALUATING:
-        task.status = TaskStatus.UNKNOWN_WAS_TRAINING
+        task.status = TaskStatus.UNKNOWN_WAS_EVALUATING
         self.print("Client(id={}) had EVALUATING task {}, reverting to WAITING_EVAL".format(client.id, task.name))
       else:
         self.print(
