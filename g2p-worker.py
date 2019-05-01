@@ -117,7 +117,7 @@ def validate(message):
   try:
     model_path = "{}/{}".format(work_dir, message.taskName)
     try:
-      shutil.rmtree(pathlib.Path(model_path))
+      shutil.rmtree(model_path)
     except FileNotFoundError:
       pass
     pathlib.Path(model_path).mkdir(parents=True, exist_ok=True)
