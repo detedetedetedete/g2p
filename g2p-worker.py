@@ -25,6 +25,16 @@ import proto.task_type_pb2 as TaskType
 import tensorflow as tf
 import tarfile
 import argparse
+import random
+import socket
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--address", default="localhost", type=str)
+parser.add_argument("--port", default=8000, type=int)
+parser.add_argument("--trace", default=False, type=bool)
+parser.add_argument("--name", default=socket.gethostname(), type=str)
+args = parser.parse_args()
 
 status = WorkerStatus.IDLE
 task = TaskType.NONE
@@ -36,14 +46,7 @@ data = None
 work_dir = "g2p-worker-{}".format(int(round(time.time() * 1000)))
 progress = 0
 work = True
-
-parser = argparse.ArgumentParser()
-
-parser.add_argument("--address", default="localhost", type=str)
-parser.add_argument("--port", default=8000, type=int)
-parser.add_argument("--trace", default=False, type=bool)
-
-args = parser.parse_args()
+name = "{}-{}".format(args.name, random.randint(0, 9000))
 
 
 def compress_and_set_result(model_path):
@@ -140,6 +143,8 @@ def validate(message):
 def on_message(ws, data):
   global status
   global task
+  global work
+  global progress
   message = MasterMessage()
   message.ParseFromString(data)
   print("<<<Got message from master:\n{}".format(text_format.MessageToString(message, message_formatter=formatter)))
@@ -154,6 +159,12 @@ def on_message(ws, data):
   elif message.task == TaskType.NONE:
     status = WorkerStatus.IDLE
     task = TaskType.NONE
+    progress = 0
+  elif message.task == TaskType.SHUTDOWN:
+    status = WorkerStatus.SHUTTING_DOWN
+    task = TaskType.NONE
+    progress = 0
+    work = False
   else:
     print("Got unknown task form master: {}".format(text_format.MessageToString(message.task)))
 
@@ -199,14 +210,16 @@ def heartbeat(ws):
       message.type = device
       message.task = task
       message.progress = progress
+      message.name = name
       if status == WorkerStatus.DONE:
         message.data = data
       print("\n>>>Sending message to master:\n{}"
             .format(text_format.MessageToString(message, message_formatter=formatter)))
       ws.send(message.SerializeToString(), ABNF.OPCODE_BINARY)
+  ws.close()
 
 
-thrd = threading.Thread(target=heartbeat, args=[ws])
+thrd = threading.Thread(target=heartbeat, args=[ws], daemon=True)
 thrd.start()
 ws.run_forever()
 thrd.join()

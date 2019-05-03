@@ -3,18 +3,23 @@
     <script src="gui.js"></script>
   </head>
   <body>
-    <h1 id="socket-status">Socket status: connecting...</h4>
+    <h1 id="socket-status">Socket status: connecting...</h1>
     <span id="last-update">No updates yet...</span><br>
     <span id="last-log-message">No log messages yet...</span>
     <div>
       <textarea id="log-textarea" style="width:900px; height:400px;"></textarea>
     </div>
+    <input type="text" id="model-path"/>
+    <input type="button" id="add-models" value="Add model"/>
+    <input type="text" id="model-dir-path"/>
+    <input type="button" id="add-model-dirs" value="Add dir"/>
     <div>
       <h2>Clients</h2>
       <table id="client-table" style="border: solid 1px #999;">
         <thead>
           <tr style="border: solid 1px #999;">
-            <th style="border: solid 1px #999;">Client</th>
+            <th style="border: solid 1px #999;">Id</th>
+            <th style="border: solid 1px #999;">Name</th>
             <th style="border: solid 1px #999;">Status</th>
             <th style="border: solid 1px #999;">Type</th>
             <th style="border: solid 1px #999;">Trained</th>
@@ -22,10 +27,17 @@
             <th style="border: solid 1px #999;">Task</th>
             <th style="border: solid 1px #999;">Task type</th>
             <th style="border: solid 1px #999;">Progress</th>
+            <th style="border: solid 1px #999;">Paused</th>
+            <th style="border: solid 1px #999;">Shutdown scheduled</th>
+            <th style="border: solid 1px #999;">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr style="display: none; border: solid 1px #999;">
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
+            <td style="border: solid 1px #999;"></td>
             <td style="border: solid 1px #999;"></td>
             <td style="border: solid 1px #999;"></td>
             <td style="border: solid 1px #999;"></td>

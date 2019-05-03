@@ -9,5 +9,6 @@ enum WorkerStatus {
     DONE = 3;
     PENDING = 4;
     DISCONNECTED = 5;
+    SHUTTING_DOWN = 6;
 }
 

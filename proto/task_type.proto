@@ -6,5 +6,6 @@ enum TaskType {
     TRAIN = 0;
     EVALUATE = 1;
     NONE = 2;
+    SHUTDOWN = 3;
 }
 

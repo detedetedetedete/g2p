@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='task_type.proto',
   package='g2p',
   syntax='proto2',
-  serialized_pb=_b('\n\x0ftask_type.proto\x12\x03g2p*-\n\x08TaskType\x12\t\n\x05TRAIN\x10\x00\x12\x0c\n\x08\x45VALUATE\x10\x01\x12\x08\n\x04NONE\x10\x02')
+  serialized_pb=_b('\n\x0ftask_type.proto\x12\x03g2p*;\n\x08TaskType\x12\t\n\x05TRAIN\x10\x00\x12\x0c\n\x08\x45VALUATE\x10\x01\x12\x08\n\x04NONE\x10\x02\x12\x0c\n\x08SHUTDOWN\x10\x03')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -42,11 +42,15 @@ _TASKTYPE = _descriptor.EnumDescriptor(
       name='NONE', index=2, number=2,
       options=None,
       type=None),
+    _descriptor.EnumValueDescriptor(
+      name='SHUTDOWN', index=3, number=3,
+      options=None,
+      type=None),
   ],
   containing_type=None,
   options=None,
   serialized_start=24,
-  serialized_end=69,
+  serialized_end=83,
 )
 _sym_db.RegisterEnumDescriptor(_TASKTYPE)
 
@@ -54,6 +58,7 @@ TaskType = enum_type_wrapper.EnumTypeWrapper(_TASKTYPE)
 TRAIN = 0
 EVALUATE = 1
 NONE = 2
+SHUTDOWN = 3
 
 
 DESCRIPTOR.enum_types_by_name['TaskType'] = _TASKTYPE

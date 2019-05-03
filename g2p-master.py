@@ -34,12 +34,16 @@ class Task(object):
 
 # noinspection PyShadowingBuiltins
 class Client(object):
-  def __init__(self, client, status, task=None, type=None, progress=None):
+  def __init__(self, client, status, task=None, type=None, progress=None, shutdown_scheduled=False, name=None,
+               paused=False):
     self.client = client
     self.status = status
     self.task = task
     self.type = type
     self.progress = progress
+    self.shutdown_scheduled = shutdown_scheduled
+    self.name = name
+    self.paused = paused
 
 
 class SimpleEncoder(JSONEncoder):
@@ -146,6 +150,20 @@ class Master(object):
 
       self.send_message(client, response)
       return
+
+    # send shutdown task if such is scheduled
+    if self.clients[client.id].shutdown_scheduled:
+      response.task = TaskType.SHUTDOWN
+      response.taskName = "SHUTDOWN"
+      self.send_message(client, response)
+      return
+
+    if self.clients[client.id].paused:
+      response.task = TaskType.NONE
+      response.taskName = "NOP"
+      self.send_message(client, response)
+      return
+
     task = self.get_task(message.type)
     if task is None:
       self.print("No available tasks")
@@ -225,13 +243,14 @@ class Master(object):
     self.clients[client.id].status = message.status
     self.clients[client.id].type = message.type
     self.clients[client.id].progress = message.progress
+    self.clients[client.id].name = message.name
     if message.status == WorkerStatus.IDLE:
       self.handle_idle(client, message)
     elif message.status == WorkerStatus.DONE:
       self.handle_done(client, message)
     elif message.status == WorkerStatus.ERROR:
       self.handle_error(client, message)
-    elif message.status == WorkerStatus.WORKING:
+    elif message.status in [WorkerStatus.WORKING, WorkerStatus.SHUTTING_DOWN]:
       pass
     else:
       self.print("Got status {} from client(id={}), status handling not implemented!"
@@ -243,6 +262,9 @@ class Master(object):
     self.print("Client(id={}) disconnected.".format(client.id))
     self.clients[client.id].client = client.id
     self.clients[client.id].status = WorkerStatus.DISCONNECTED
+    self.clients[client.id].progress = None
+    self.clients[client.id].shutdown_scheduled = None
+    self.clients[client.id].paused = None
     self.clients[client.id].progress = None
     if self.clients[client.id].task is not None:
       task = self.clients[client.id].task
@@ -270,6 +292,27 @@ class Master(object):
 
   def on_gui_client_disconnect(self, gui):
     self.gui.pop(gui.id, None)
+
+  def add_models(self, models, repeats, epochs, batch_size, present_models={}):
+    for model in models:
+      for i in range(0, repeats):
+        task = Task()
+        task.status = TaskStatus.WAITING_TRAIN
+        with open(model) as file:
+          task.model_def = json.load(file)
+        task.model_def["epochs"] = epochs
+        task.model_def["batch_size"] = batch_size
+        task.name = "{}-{}".format(task.model_def["name"], i)
+        if task.model_def["name"] in present_models and str(i) in present_models[task.model_def["name"]]:
+          task.status = present_models[task.model_def["name"]][str(i)]
+          self.print("Task {} already exists with status {}".format(task.name, TaskStatus.TaskStatus.Name(task.status)))
+        elif task.name in self.tasks:
+          self.print("Task {} already exists with status {}".format(
+            task.name, TaskStatus.TaskStatus.Name(self.tasks[task.name].status)))
+          continue
+        else:
+          self.print("Added task {}".format(task.name))
+        self.tasks[task.name] = task
 
 
 master_instance = Master()
@@ -304,13 +347,56 @@ class WorkerClient(websocket.WebSocketHandler):
     return True
 
 
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--gui_address", default="", type=str)
+parser.add_argument("--gui_port", default=8888, type=int)
+parser.add_argument("--worker_address", default="", type=str)
+parser.add_argument("--worker_port", default=8000, type=int)
+parser.add_argument("--models", nargs='+', type=str, default=[])
+parser.add_argument("--model_dirs", nargs='+', type=str, default=[])
+parser.add_argument("--repeat", default=5, type=int)
+parser.add_argument("--epochs", default=300, type=int)
+parser.add_argument("--batch_size", default=64, type=int)
+
+
+args = parser.parse_args()
+
+
+def collect_models(models=[], model_dirs=[]):
+  mdls = [] + models
+  for directory in model_dirs:
+    files = os.listdir(directory)
+    for file in files:
+      if file.endswith(".json"):
+        mdls.append("{}/{}".format(directory, file))
+  return mdls
+
+
 # noinspection PyBroadException,PyShadowingNames
 class GuiClient(websocket.WebSocketHandler):
   def data_received(self, chunk):
     pass
 
   def on_message(self, message):
-    pass
+    try:
+      msg = json.loads(message)
+      if "shutdown" in msg:
+        master_instance.clients[msg["shutdown"]].shutdown_scheduled = True
+      if "cancel_shutdown" in msg:
+        master_instance.clients[msg["cancel_shutdown"]].shutdown_scheduled = False
+      if "pause" in msg:
+        master_instance.clients[msg["pause"]].paused = True
+      if "unpause" in msg:
+        master_instance.clients[msg["unpause"]].paused = False
+      if "add" in msg:
+        models = [] if "models" not in msg["add"] else msg["add"]["models"]
+        model_dirs = [] if "model_dirs" not in msg["add"] else msg["add"]["model_dirs"]
+        master_instance.add_models(collect_models(models, model_dirs), args.repeat, args.epochs, args.batch_size)
+      master_instance.update_gui()
+    except Exception:
+      err = {"error": traceback.format_exc()}
+      self.write_message(json.dumps(err))
 
   def open(self):
     try:
@@ -328,21 +414,6 @@ class GuiClient(websocket.WebSocketHandler):
     return True
 
 
-parser = argparse.ArgumentParser()
-
-parser.add_argument("--gui_address", default="", type=str)
-parser.add_argument("--gui_port", default=8888, type=int)
-parser.add_argument("--worker_address", default="", type=str)
-parser.add_argument("--worker_port", default=8000, type=int)
-parser.add_argument("--models", nargs='+', type=str, default=[])
-parser.add_argument("--model_dirs", nargs='+', type=str, default=[])
-parser.add_argument("--repeat", default=5, type=int)
-parser.add_argument("--epochs", default=300, type=int)
-parser.add_argument("--batch_size", default=64, type=int)
-
-
-args = parser.parse_args()
-
 worked_models = os.listdir("./work") if os.path.isdir("./work") else []
 present_models = {}
 for idx, value in enumerate(worked_models):
@@ -357,32 +428,13 @@ for idx, value in enumerate(worked_models):
     present_models[name][repeat] = TaskStatus.TaskStatus.Value(status)
 
 
-models = args.models
-for directory in args.model_dirs:
-  files = os.listdir(directory)
-  for file in files:
-    if file.endswith(".json"):
-      models.append("{}/{}".format(directory, file))
+models = collect_models(args.models, args.model_dirs)
 
 if len(models) == 0:
   print("No tasks!")
   sys.exit(-1)
 
-for model in models:
-  for i in range(0, args.repeat):
-    task = Task()
-    task.status = TaskStatus.WAITING_TRAIN
-    with open(model) as file:
-      task.model_def = json.load(file)
-    task.model_def["epochs"] = args.epochs
-    task.model_def["batch_size"] = args.batch_size
-    task.name = "{}-{}".format(task.model_def["name"], i)
-    if task.model_def["name"] in present_models and str(i) in present_models[task.model_def["name"]]:
-      task.status = present_models[task.model_def["name"]][str(i)]
-      print("Task {} already exists with status {}".format(task.name, TaskStatus.TaskStatus.Name(task.status)))
-    else:
-      print("Added task {}".format(task.name))
-    master_instance.tasks[task.name] = task
+master_instance.add_models(models, args.repeat, args.epochs, args.batch_size, present_models)
 
 gui_app = tornado.web.Application([(r"/", GuiClient)], websocket_max_message_size=1024*1024*1024)
 worker_app = tornado.web.Application([(r"/", WorkerClient)], websocket_max_message_size=1024*1024*1024)
