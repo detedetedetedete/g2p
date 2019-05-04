@@ -60,17 +60,19 @@ window.onload = function() {
         let cells = row.querySelectorAll('td');
         cells[0].innerText = task.name;
         cells[1].innerText = task.status;
-        cells[2].innerText = '---';
+        cells[2].innerText = task.status === 'EVALUATING' || task.status === 'TRAINING' ?
+            Object.values(object.clients).find(c => c.task && c.task.name == task.name).progress : '---';
         cells[3].innerText = '---';
-        cells[4].querySelector('input').onclick = (evt) => console.log(task.model_def);
+        cells[4].innerText = '---';
+        cells[5].querySelector('input').onclick = (evt) => console.log(task.model_def);
         taskTableBodyEl.appendChild(row);
         if(notNullOrUndefined(task.trained_by)) {
           object.clients[task.trained_by].trained = (object.clients[task.trained_by].trained || 0) + 1;
-          cells[2].innerText = task.trained_by;
+          cells[3].innerText = task.trained_by;
         }
         if(notNullOrUndefined(task.evaluated_by)) {
           object.clients[task.evaluated_by].evaluated = (object.clients[task.evaluated_by].evaluated || 0) + 1;
-          cells[3].innerText = task.evaluated_by;
+          cells[4].innerText = task.evaluated_by;
         }
       }
       

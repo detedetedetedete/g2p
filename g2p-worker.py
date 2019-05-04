@@ -43,10 +43,10 @@ if tf.test.gpu_device_name():
 else:
   device = WorkerType.CPU
 data = None
-work_dir = "g2p-worker-{}".format(int(round(time.time() * 1000)))
+name = "{}-{}".format(args.name, random.randint(0, 9000))
+work_dir = "g2p-worker-{}".format(name)
 progress = 0
 work = True
-name = "{}-{}".format(args.name, random.randint(0, 9000))
 
 
 def compress_and_set_result(model_path):
