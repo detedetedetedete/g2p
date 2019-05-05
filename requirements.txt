@@ -1,3 +1,4 @@
+xlsxwriter
 h5py
 Keras
 matplotlib
