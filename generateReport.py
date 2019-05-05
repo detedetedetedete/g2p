@@ -69,9 +69,11 @@ for instance in work:
 
 workbook = xlsxwriter.Workbook('report.xlsx')
 worksheet = workbook.add_worksheet('report')
+general_chart = workbook.add_chart({'type': 'column'})
 bold_format = workbook.add_format({'bold': True})
 accent_format = workbook.add_format({'bold': True, 'color': 'red'})
 title_format = workbook.add_format({'bold': True, 'align': 'center'})
+category_format = workbook.add_format({'bold': True, 'align': 'center'})
 
 offset = 35
 for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x[0])):
@@ -80,10 +82,17 @@ for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x
   chart.set_title({'name': 'Klaidų pasiskirstymas'})
   chart.set_x_axis({'name': 'Klaidų kiekis'})
   chart.set_y_axis({'name': 'Dalis, %', 'min': 0, 'max': 100})
+  chart2 = workbook.add_chart({'type': 'column'})
+  chart2.set_size({'x_scale': 1, 'y_scale': 2.2})
+  chart2.set_title({'name': 'Klaidų pasiskirstymas'})
+  chart2.set_x_axis({'name': 'Klaidų kiekis'})
+  chart2.set_y_axis({'name': 'Dalis, %', 'min': 90, 'max': 100})
   worksheet.merge_range(offset * r_idx, 1, offset * r_idx, 5, name, title_format)
+  worksheet.merge_range(offset*len(results) + r_idx, 1, offset*len(results) + r_idx, 5, name, category_format)
   for i in range(10, 301, 10):
     worksheet.write(int(offset * r_idx + 1 + i / 10), 0, i, bold_format)
   for i in range(0, max_errors+1):
+    worksheet.write(offset * len(results) - 1, 6 + i, i, bold_format)
     worksheet.write(offset * r_idx + 2 + i, 7, i, bold_format)
 
   for b_idx, (b_name, epochs) in enumerate(sorted(bandymai.items(), key=lambda x: x[0])):
@@ -113,9 +122,28 @@ for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x
               'categories': ['report', offset*r_idx + 2, 7, offset*r_idx + 2 + max_errors, 7],
               'values': ['report', offset*r_idx + 2, b_idx + 8, offset*r_idx + 2 + max_errors, b_idx + 8]
             })
+            chart2.add_series({
+              'name': ['report', offset * r_idx + 1, b_idx + 8],
+              'categories': ['report', offset * r_idx + 2, 7, offset * r_idx + 2, 7],
+              'values': ['report', offset * r_idx + 2, b_idx + 8, offset * r_idx + 2, b_idx + 8]
+            })
           worksheet.write(offset * r_idx + 2 + a_idx, b_idx + 8,
                           0 if str(a_idx) not in accuracies else float(accuracies[str(a_idx)]))
+          if bandymai["best"]["idx"] == b_name:
+            worksheet.write(offset * len(results) + r_idx, 6 + a_idx,
+                          0 if str(a_idx) not in accuracies else float(accuracies[str(a_idx)]))
+            if a_idx == 0:
+              general_chart.add_series({
+                'name': ['report', offset * len(results) + r_idx, 1],
+                'categories': ['report', offset * len(results) - 1, 6, offset * len(results) - 1, 6 + 5],
+                'values': ['report', offset * len(results) + r_idx, 6, offset * len(results) + r_idx, 6 + 5]
+              })
+
   worksheet.insert_chart(offset*r_idx + 1, 14, chart)
-
-
+  worksheet.insert_chart(offset*r_idx + 1, 31, chart2)
+general_chart.set_size({'x_scale': 5, 'y_scale': 2.2})
+general_chart.set_title({'name': 'Klaidų pasiskirstymas'})
+general_chart.set_x_axis({'name': 'Klaidų kiekis'})
+general_chart.set_y_axis({'name': 'Dalis, %', 'min': 0, 'max': 100})
+worksheet.insert_chart(offset * (len(results) + 1), 1, general_chart)
 workbook.close()
