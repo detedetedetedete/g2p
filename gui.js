@@ -121,14 +121,18 @@ window.onload = function() {
           cells[11].appendChild(shutdown_btn);
         }
 
-        client.limit = client.limit || 'NONE';
-        cells[12].querySelector(`option[value='${client.limit}']`).selected = true;
-        cells[12].querySelector('select').onchange = (evt) => ws.send(JSON.stringify({
-          limit: {
-            client: client.client,
-            value: evt.srcElement.value
-          }
-        }));
+        if(client.status !== 'DISCONNECTED') {
+          client.limit = client.limit || 'NONE';
+          cells[12].querySelector(`option[value='${client.limit}']`).selected = true;
+          cells[12].querySelector('select').onchange = (evt) => ws.send(JSON.stringify({
+            limit: {
+              client: client.client,
+              value: evt.srcElement.value
+            }
+          }));
+        } else {
+          cells[12].querySelector('select').remove();
+        }
 
         clientTableBodyEl.appendChild(row);
       }
