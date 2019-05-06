@@ -77,7 +77,7 @@ class Master(object):
   def on_new_client(self, client):
     client.id = self.counter
     self.counter += 1
-    self.clients[client.id] = Client(client.id, WorkerStatus.PENDING)
+    self.clients[client.id] = Client(client.id, WorkerStatus.PENDING, paused=True)
     self.print("New client(id={}) connected.".format(client.id))
 
   def print(self, string):
