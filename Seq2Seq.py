@@ -376,11 +376,14 @@ class Seq2Seq(object):
 
     return accuracy
 
-  def _generate_report(self):
+  def _generate_report(self, data_type=None):
     accuracy = {"train": {}, "validate": {}, "full": {}}
     report = {"train": [], "validate": [], "full": []}
 
-    for type in self.last_train_data:
+    if data_type is None:
+      data_type = self.last_train_data
+
+    for type in data_type:
       for idx in range(0, len(self.last_train_data[type]["in"])):
         input = self.last_train_data[type]["in"][idx]
         true_output = self.out_map.decode(self.last_train_data[type]["out"][idx])
@@ -411,9 +414,9 @@ class Seq2Seq(object):
     with Tee("{}/{}-{:.2f}-{:.2f}-{:.2f}.log".format(
               self.working_dir,
               name,
-              train / len(report["train"]) * 100,
-              val / len(report["validate"]) * 100,
-              full / len(report["full"]) * 100
+              train / (1 if len(report["train"]) == 0 else len(report["train"])) * 100,
+              val / (1 if len(report["validate"]) == 0 else len(report["validate"])) * 100,
+              full / (1 if len(report["full"]) == 0 else len(report["full"])) * 100
           ),
           'a'
       ):
@@ -439,7 +442,7 @@ class Seq2Seq(object):
   def load_weights(self, path):
     self.training_model.load_weights(path)
 
-  def evaluate_checkpoints(self, progress=lambda p: None):
+  def evaluate_checkpoints(self, progress=lambda p: None, data_type=None):
     if not os.path.isdir("{}/checkpoints".format(self.working_dir)):
       print("No checkpoint folder!")
       return
@@ -450,7 +453,7 @@ class Seq2Seq(object):
       print("Evaluating {}...".format(path))
       self.load_weights(path)
       relative_path = "checkpoints/{}".format(checkpoint)
-      accuracy, report = self._generate_report()
+      accuracy, report = self._generate_report(data_type)
       self.save_accuracy(accuracy, report, relative_path)
       progress(idx+1)
     self.load_weights("{}/model-weights.h5".format(self.working_dir))

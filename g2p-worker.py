@@ -130,7 +130,7 @@ def validate(message):
     model = Seq2Seq(load=True, working_dir=model_path)
     model.save_full_report()
     progress = 1
-    model.evaluate_checkpoints(progress=lambda p: set_progress(p+1))
+    model.evaluate_checkpoints(progress=lambda p: set_progress(p+1), data_type=['validate'])
 
     compress_and_set_result(model_path)
   except Exception:

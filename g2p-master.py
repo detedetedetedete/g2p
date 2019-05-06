@@ -35,7 +35,7 @@ class Task(object):
 # noinspection PyShadowingBuiltins
 class Client(object):
   def __init__(self, client, status, task=None, type=None, progress=None, shutdown_scheduled=False, name=None,
-               paused=False):
+               paused=False, limit=None):
     self.client = client
     self.status = status
     self.task = task
@@ -44,6 +44,7 @@ class Client(object):
     self.shutdown_scheduled = shutdown_scheduled
     self.name = name
     self.paused = paused
+    self.limit = limit
 
 
 class SimpleEncoder(JSONEncoder):
@@ -58,6 +59,7 @@ class SimpleEncoder(JSONEncoder):
       result = copy.deepcopy(o).__dict__
       result["status"] = WorkerStatus.WorkerStatus.Name(result["status"])
       result["type"] = None if result["type"] is None else WorkerType.WorkerType.Name(result["type"])
+      result["limit"] = None if result["limit"] is None else TaskType.TaskType.Name(result["limit"])
       return result
     else:
       return o.__dict__
@@ -86,7 +88,7 @@ class Master(object):
     for id, gui in self.gui.items():
       gui.write_message(msg)
 
-  def get_task(self, type):
+  def get_task(self, type, limit):
     first_unknown_train = None
     first_unknown_eval = None
     first_waiting_train = None
@@ -105,6 +107,12 @@ class Master(object):
 
     if all(i is None for i in [first_waiting_eval, first_waiting_train, first_unknown_eval, first_unknown_train]):
       return None
+
+    if limit is not None and limit != TaskType.NONE:
+      if limit == TaskType.TRAIN:
+        return first_waiting_train if first_waiting_train is not None else first_unknown_train
+      else:
+        return first_waiting_eval if first_waiting_eval is not None else first_unknown_eval
 
     if type == WorkerType.CPU:
       return next(
@@ -164,7 +172,7 @@ class Master(object):
       self.send_message(client, response)
       return
 
-    task = self.get_task(message.type)
+    task = self.get_task(message.type, self.clients[client.id].limit)
     if task is None:
       self.print("No available tasks")
       response.task = TaskType.NONE
@@ -393,6 +401,8 @@ class GuiClient(websocket.WebSocketHandler):
         models = [] if "models" not in msg["add"] else msg["add"]["models"]
         model_dirs = [] if "model_dirs" not in msg["add"] else msg["add"]["model_dirs"]
         master_instance.add_models(collect_models(models, model_dirs), args.repeat, args.epochs, args.batch_size)
+      if "limit" in msg:
+        master_instance.clients[msg["limit"]["client"]] = TaskType.TaskType.Value(msg["limit"]["value"])
       master_instance.update_gui()
     except Exception:
       err = {"error": traceback.format_exc()}
