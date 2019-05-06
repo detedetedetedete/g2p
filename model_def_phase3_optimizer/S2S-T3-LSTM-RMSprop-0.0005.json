@@ -1,5 +1,5 @@
 {
-  "name": "S2S-T6-LSTM-RMSProp-0.0005-Elu",
+  "name": "S2S-T3-LSTM-RMSprop-0.0005",
   "in_tokens": [ "a", "ą", "b", "c", "č", "d", "e", "ę", "ė", "f", "g",
                     "h", "i", "į", "y", "j", "k", "l", "m", "n", "o", "p",
                     "r", "s", "š", "t", "u", "ų", "ū", "v", "z", "ž" ],
@@ -11,7 +11,7 @@
   "compile": {
     "loss": "categorical_crossentropy",
     "optimizer": {
-      "type": "RMSProp",
+      "type": "RMSprop",
       "args": [],
       "params": {
         "lr": 0.0005
@@ -21,7 +21,6 @@
   "layers": [
     { "type": "LSTM", "params": { "units":  152 } },
     { "type": "LSTM", "params": { "units":  76 } },
-    { "type": "Dense", "params": { "units":  76, "activation": "elu" } },
     { "type": "Dense", "params": { "activation": "softmax" } }
   ]
 }
