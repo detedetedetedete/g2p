@@ -171,14 +171,10 @@ def on_message(ws, data):
 
 
 def on_error(ws, error):
-  global work
-  work = False
   print(error)
 
 
 def on_close(ws):
-  global work
-  work = False
   print("### closed ###")
 
 

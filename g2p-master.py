@@ -263,6 +263,7 @@ class Master(object):
       return
 
     self.clients[client.id] = old_client
+    self.clients[client.id].client = client.id
     self.clients.pop(old_id, None)
     self.print("Client(name={}) reassigned from id={} to id={}.".format(message.name, old_id, client.id))
 
