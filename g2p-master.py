@@ -245,6 +245,27 @@ class Master(object):
     self.clients[client.id].task = None
     self.handle_idle(client, message)
 
+  def handle_reconnect(self, client, message):
+    old_client = None
+    old_id = None
+    for id, c in self.clients.items():
+      if c.name == message.name:
+        old_client = c
+        old_id = id
+        break
+
+    if old_client is None:
+      self.print("There was no client with name {}".format(message.name))
+      return
+
+    if old_id == client.id:
+      self.print("Client(name={}, id={}) was already reassigned.".format(message.name, client.id))
+      return
+
+    self.clients[client.id] = old_client
+    self.clients.pop(old_id, None)
+    self.print("Client(name={}) reassigned from id={} to id={}.".format(message.name, old_id, client.id))
+
   def on_client_message(self, client, message):
     self.print("<<<Message from client(id={}):\n{}"
                .format(client.id, text_format.MessageToString(message, message_formatter=formatter)))
@@ -258,6 +279,8 @@ class Master(object):
       self.handle_done(client, message)
     elif message.status == WorkerStatus.ERROR:
       self.handle_error(client, message)
+    elif message.status == WorkerStatus.RECONNECTING:
+      self.handle_reconnect(client, message)
     elif message.status in [WorkerStatus.WORKING, WorkerStatus.SHUTTING_DOWN]:
       pass
     else:
@@ -268,6 +291,10 @@ class Master(object):
 
   def on_client_disconnect(self, client):
     self.print("Client(id={}) disconnected.".format(client.id))
+    if client.id not in self.clients:
+      self.print("Client(id={}) not in clients list, was probably reassigned at some point to another id."
+                 .format(client.id))
+      return
     self.clients[client.id].client = client.id
     self.clients[client.id].status = WorkerStatus.DISCONNECTED
     self.clients[client.id].progress = None

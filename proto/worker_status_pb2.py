@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='worker_status.proto',
   package='g2p',
   syntax='proto2',
-  serialized_pb=_b('\n\x13worker_status.proto\x12\x03g2p*l\n\x0cWorkerStatus\x12\x08\n\x04IDLE\x10\x00\x12\x0b\n\x07WORKING\x10\x01\x12\t\n\x05\x45RROR\x10\x02\x12\x08\n\x04\x44ONE\x10\x03\x12\x0b\n\x07PENDING\x10\x04\x12\x10\n\x0c\x44ISCONNECTED\x10\x05\x12\x11\n\rSHUTTING_DOWN\x10\x06')
+  serialized_pb=_b('\n\x13worker_status.proto\x12\x03g2p*~\n\x0cWorkerStatus\x12\x08\n\x04IDLE\x10\x00\x12\x0b\n\x07WORKING\x10\x01\x12\t\n\x05\x45RROR\x10\x02\x12\x08\n\x04\x44ONE\x10\x03\x12\x0b\n\x07PENDING\x10\x04\x12\x10\n\x0c\x44ISCONNECTED\x10\x05\x12\x11\n\rSHUTTING_DOWN\x10\x06\x12\x10\n\x0cRECONNECTING\x10\x07')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -58,11 +58,15 @@ _WORKERSTATUS = _descriptor.EnumDescriptor(
       name='SHUTTING_DOWN', index=6, number=6,
       options=None,
       type=None),
+    _descriptor.EnumValueDescriptor(
+      name='RECONNECTING', index=7, number=7,
+      options=None,
+      type=None),
   ],
   containing_type=None,
   options=None,
   serialized_start=28,
-  serialized_end=136,
+  serialized_end=154,
 )
 _sym_db.RegisterEnumDescriptor(_WORKERSTATUS)
 
@@ -74,6 +78,7 @@ DONE = 3
 PENDING = 4
 DISCONNECTED = 5
 SHUTTING_DOWN = 6
+RECONNECTING = 7
 
 
 DESCRIPTOR.enum_types_by_name['WorkerStatus'] = _WORKERSTATUS

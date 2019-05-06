@@ -43,10 +43,11 @@ if tf.test.gpu_device_name():
 else:
   device = WorkerType.CPU
 data = None
-name = "{}-{}".format(args.name, random.randint(0, 9000))
+name = "{}-{}".format(args.name, random.randint(0, 1000000))
 work_dir = "g2p-worker-{}".format(name)
 progress = 0
 work = True
+reconnected = False
 
 
 def compress_and_set_result(model_path):
@@ -199,12 +200,25 @@ ws.on_open = on_open
 
 
 def heartbeat(ws):
+  global reconnected
   sleep = 5
   while work:
     time.sleep(sleep)
     if ws is not None:
       if sleep == 5:
         sleep = 60
+      message = WorkerMessage()
+      if reconnected:
+        message.status = WorkerStatus.RECONNECTING
+        message.task = task
+        message.type = device
+        message.name = name
+        print("\n>>>Sending message to master:\n{}"
+              .format(text_format.MessageToString(message, message_formatter=formatter)))
+        ws.send(message.SerializeToString(), ABNF.OPCODE_BINARY)
+        reconnected = False
+        continue
+
       message = WorkerMessage()
       message.status = status
       message.type = device
@@ -222,4 +236,7 @@ def heartbeat(ws):
 thrd = threading.Thread(target=heartbeat, args=[ws], daemon=True)
 thrd.start()
 ws.run_forever()
+while work:
+  print("Connection dropped, reconnecting...")
+  ws.run_forever()
 thrd.join()
