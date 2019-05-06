@@ -402,7 +402,7 @@ class GuiClient(websocket.WebSocketHandler):
         model_dirs = [] if "model_dirs" not in msg["add"] else msg["add"]["model_dirs"]
         master_instance.add_models(collect_models(models, model_dirs), args.repeat, args.epochs, args.batch_size)
       if "limit" in msg:
-        master_instance.clients[msg["limit"]["client"]] = TaskType.TaskType.Value(msg["limit"]["value"])
+        master_instance.clients[msg["limit"]["client"]].limit = TaskType.TaskType.Value(msg["limit"]["value"])
       master_instance.update_gui()
     except Exception:
       err = {"error": traceback.format_exc()}

@@ -122,7 +122,7 @@ window.onload = function() {
         }
 
         client.limit = client.limit || 'NONE';
-        cells[12].querySelector(`option["value"="${client.limit}"]`).selected = true;
+        cells[12].querySelector(`option[value='${client.limit}']`).selected = true;
         cells[12].querySelector('select').onchange = (evt) => ws.send(JSON.stringify({
           limit: {
             client: client.client,
