@@ -474,8 +474,10 @@ if len(models) == 0:
 
 master_instance.add_models(models, args.repeat, args.epochs, args.batch_size, present_models)
 
-gui_app = tornado.web.Application([(r"/", GuiClient)], websocket_max_message_size=1024*1024*1024)
-worker_app = tornado.web.Application([(r"/", WorkerClient)], websocket_max_message_size=1024*1024*1024)
+gui_app = tornado.web.Application([(r"/", GuiClient)], websocket_max_message_size=1024*1024*1024,
+                                  websocket_ping_interval=10)
+worker_app = tornado.web.Application([(r"/", WorkerClient)], websocket_max_message_size=1024*1024*1024,
+                                     websocket_ping_interval=10)
 
 worker_server = HTTPServer(worker_app, max_buffer_size=1024*1024*1024)
 

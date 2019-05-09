@@ -233,6 +233,7 @@ thrd = threading.Thread(target=heartbeat, args=[ws], daemon=True)
 thrd.start()
 ws.run_forever()
 while work:
+  global reconnected
   print("Connection dropped, reconnecting...")
   reconnected = True
   ws.run_forever()

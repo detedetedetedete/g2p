@@ -1,10 +1,26 @@
+import argparse
 import re
+import sys
+
 import xlsxwriter
 import os
 
 
-work = os.listdir("work")
-work = [f for f in work if os.path.isdir("work/{}/checkpoints".format(f))]
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--work_dirs", nargs='+', type=str, default=[])
+parser.add_argument("--name", default='report.xslx', type=str)
+
+args = parser.parse_args()
+
+if len(args.work_dirs) == 0:
+  print("No work dirs specified!")
+  sys.exit(1)
+
+work = []
+for wdir in args.work_dirs:
+  models = os.listdir(wdir)
+  work += ["{}/{}".format(wdir, f) for f in models if os.path.isdir("{}/{}/checkpoints".format(wdir, f))]
 
 # name -> bandymas -> epoch -> accuracy
 results = {}
@@ -18,7 +34,7 @@ for instance in work:
   name = groups[0]
   bd = groups[1]
 
-  for log in os.listdir("work/{}/checkpoints".format(instance)):
+  for log in os.listdir("{}/checkpoints".format(instance)):
     if not log.endswith(".log"):
       continue
     match = re.match(r'weights\.([0-9]+)-', log)
@@ -40,7 +56,7 @@ for instance in work:
       }
     if epoch not in results[name][bd]:
       results[name][bd][epoch] = {}
-    with open("work/{}/checkpoints/{}".format(instance, log)) as file:
+    with open("{}/checkpoints/{}".format(instance, log)) as file:
       val = list(file)
       start = False
       for line in val:
@@ -67,7 +83,11 @@ for instance in work:
           max_errors = int(err_count)
 
 
-workbook = xlsxwriter.Workbook('report.xlsx')
+def get_name(string):
+  return re.match(r'.*?([^/]+)$', string).groups()[0]
+
+
+workbook = xlsxwriter.Workbook(args.name)
 worksheet = workbook.add_worksheet('report')
 general_chart = workbook.add_chart({'type': 'column'})
 bold_format = workbook.add_format({'bold': True})
@@ -87,8 +107,8 @@ for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x
   chart2.set_title({'name': 'Klaidų pasiskirstymas'})
   chart2.set_x_axis({'name': 'Klaidų kiekis'})
   chart2.set_y_axis({'name': 'Dalis, %', 'min': 90, 'max': 100})
-  worksheet.merge_range(offset * r_idx, 1, offset * r_idx, 5, name, title_format)
-  worksheet.merge_range(offset*len(results) + r_idx, 1, offset*len(results) + r_idx, 5, name, category_format)
+  worksheet.merge_range(offset * r_idx, 1, offset * r_idx, 5, get_name(name), title_format)
+  worksheet.merge_range(offset*len(results) + r_idx, 1, offset*len(results) + r_idx, 5, get_name(name), category_format)
   for i in range(10, 301, 10):
     worksheet.write(int(offset * r_idx + 1 + i / 10), 0, i, bold_format)
   for i in range(0, max_errors+1):
