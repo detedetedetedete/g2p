@@ -30,7 +30,7 @@ window.onload = function() {
   }
 
   let searchParams = (new URL(document.location)).searchParams;
-  let ws = new WebSocket(`ws://${searchParams['address'] || 'localhost'}:${searchParams['port'] || 8888}`);
+  let ws = new WebSocket(`ws://${searchParams.get('address') || 'localhost'}:${searchParams.get('port') || 8888}`);
   ws.onopen = (event) => setSocketStatus('connected', '#080');
   ws.onerror = (event) => setSocketStatus(`error - ${event.message}`, '#800');
   ws.close = (event) => setSocketStatus('closed', '#400');
