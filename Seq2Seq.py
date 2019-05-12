@@ -68,6 +68,9 @@ class Seq2Seq(object):
     self.model_def = deepcopy(model_def)
     self.preprocess_model_def()
 
+    if "reverse_input" not in self.model_def:
+      self.model_def["reverse_input"] = False
+
     if self.start_token not in self.model_def["out_tokens"]:
       self.model_def["out_tokens"].append(self.start_token)
 
@@ -295,7 +298,8 @@ class Seq2Seq(object):
     decoder_output = np.zeros((len(data), max_dec_length, self.out_map.length()), dtype='float32')
 
     for i, (key, value) in enumerate(data.items()):
-      encoder_input[i] = self.in_map.encode(key, max_enc_length)
+      e_input = key[::-1] if self.model_def["reverse_input"] else key
+      encoder_input[i] = self.in_map.encode(e_input, max_enc_length)
       decoder_input[i] = self.out_map.encode(value, max_dec_length)
       decoder_output[i] = self.out_map.encode(value[1:], max_dec_length)
 
