@@ -115,6 +115,7 @@ for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x
     worksheet.write(offset * len(results) - 1, 6 + i, i, bold_format)
     worksheet.write(offset * r_idx + 2 + i, 7, i, bold_format)
 
+  best_avg = 0
   for b_idx, (b_name, epochs) in enumerate(sorted(bandymai.items(), key=lambda x: x[0])):
     if b_name == 'best':
       continue
@@ -129,9 +130,11 @@ for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x
           if epochs["best"]["idx"] == e_name and bandymai["best"]["idx"] == b_name:
             worksheet.write(offset * r_idx + 2 + e_idx, b_idx + 1,
                             0 if str(a_idx) not in accuracies else float(accuracies[str(a_idx)]), accent_format)
+            best_avg += float(accuracies[str(a_idx)])
           elif epochs["best"]["idx"] == e_name:
             worksheet.write(offset * r_idx + 2 + e_idx, b_idx + 1,
                             0 if str(a_idx) not in accuracies else float(accuracies[str(a_idx)]), bold_format)
+            best_avg += float(accuracies[str(a_idx)])
           else:
             worksheet.write(offset * r_idx + 2 + e_idx, b_idx + 1,
                             0 if str(a_idx) not in accuracies else float(accuracies[str(a_idx)]))
@@ -158,6 +161,9 @@ for r_idx, (name, bandymai) in enumerate(sorted(results.items(), key=lambda x: x
                 'categories': ['report', offset * len(results) - 1, 6, offset * len(results) - 1, 6 + 5],
                 'values': ['report', offset * len(results) + r_idx, 6, offset * len(results) + r_idx, 6 + 5]
               })
+
+  best_avg /= len(bandymai) - 1
+  worksheet.write(offset * len(results) + r_idx, 0, round(best_avg, 2), bold_format)
 
   worksheet.insert_chart(offset*r_idx + 1, 14, chart)
   worksheet.insert_chart(offset*r_idx + 1, 31, chart2)
