@@ -1,0 +1,29 @@
+{
+  "name": "S2S-T6-LSTM-Nadam-Tanh-d0002-03-r",
+  "in_tokens": [ "a", "ą", "b", "c", "č", "d", "e", "ę", "ė", "f", "g",
+                    "h", "i", "į", "y", "j", "k", "l", "m", "n", "o", "p",
+                    "r", "s", "š", "t", "u", "ų", "ū", "v", "z", "ž" ],
+  "out_tokens": [ "A", "A_", "B", "C", "C2", "CH", "D", "DZ", "DZ2", "E", "E_",
+                     "E3_", "F", "G", "H", "I", "I_", "IO_", "IU", "IU_", "J.", "K", "L",
+                     "M", "N", "O_", "P", "R", "S", "S2", "T", "U", "U_", "V", "Z", "Z2" ],
+  "max_in_length": 19,
+  "max_out_length": 20,
+  "reverse_input": true,
+  "compile": {
+    "loss": "categorical_crossentropy",
+    "optimizer": {
+      "type": "Nadam",
+      "args": [],
+      "params": {
+        "lr": 0.0005
+      }
+    }
+  },
+  "layers": [
+    { "type": "LSTM", "params": { "units":  152, "dropout": 0.0, "recurrent_dropout": 0.2 } },
+    { "type": "LSTM", "params": { "units":  76, "dropout": 0.0, "recurrent_dropout": 0.2 } },
+    { "type": "Dropout", "params":  { "rate": 0.3 } },
+    { "type": "Dense", "params": { "units":  76, "activation": "tanh" } },
+    { "type": "Dense", "params": { "activation": "softmax" } }
+  ]
+}
