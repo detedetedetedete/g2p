@@ -127,7 +127,26 @@ def validate(message):
     pathlib.Path(model_path).mkdir(parents=True, exist_ok=True)
     io_input = BytesIO(message.data)
     with tarfile.open(fileobj=io_input, mode="r:gz") as tar:
-      tar.extractall(work_dir)
+      def is_within_directory(directory, target):
+          
+          abs_directory = os.path.abspath(directory)
+          abs_target = os.path.abspath(target)
+      
+          prefix = os.path.commonprefix([abs_directory, abs_target])
+          
+          return prefix == abs_directory
+      
+      def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+      
+          for member in tar.getmembers():
+              member_path = os.path.join(path, member.name)
+              if not is_within_directory(path, member_path):
+                  raise Exception("Attempted Path Traversal in Tar File")
+      
+          tar.extractall(path, members, numeric_owner=numeric_owner) 
+          
+      
+      safe_extract(tar, work_dir)
     model = Seq2Seq(load=True, working_dir=model_path)
     model.save_full_report()
     progress = 1
